@@ -284,32 +284,13 @@ struct ActiveProfileBadge: View {
         Button {
             model.selectedTab = .profiles
         } label: {
-            BadgeLabel(name: model.activeProfile?.name ?? "Alle", avatar: model.activeProfile?.avatar)
-        }
-        .buttonStyle(PosterButtonStyle())
-    }
-
-    private struct BadgeLabel: View {
-        var name: String
-        var avatar: Avatar?
-        @Environment(\.isFocused) private var isFocused
-
-        var body: some View {
-            HStack(spacing: 14) {
-                Text(name)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(isFocused ? .white : .white.opacity(0.85))
-                AvatarView(avatar: avatar, size: 54)
-                    .overlay {
-                        Circle().strokeBorder(.white.opacity(isFocused ? 1 : 0), lineWidth: 3)
-                    }
+            // Gleiche Pill-Höhe wie die Regionen-Bubble daneben.
+            HStack(spacing: 12) {
+                Text(model.activeProfile?.name ?? "Alle")
+                AvatarView(avatar: model.activeProfile?.avatar, size: Theme.pillContentHeight)
             }
-            .padding(.leading, 20)
-            .padding(.trailing, 6)
-            .padding(.vertical, 6)
-            .background(.white.opacity(isFocused ? 0.18 : 0), in: Capsule())
-            .scaleEffect(isFocused ? 1.06 : 1)
-            .animation(.easeOut(duration: 0.15), value: isFocused)
+            .frame(height: Theme.pillContentHeight)
         }
+        .buttonStyle(PillButtonStyle())
     }
 }

@@ -11,6 +11,8 @@ enum Theme {
     static let pagePadding: CGFloat = 80
     /// Abstand zwischen Kopfbereich (Titel/Beschreibung) und den Regalen darunter.
     static let headerGap: CGFloat = 22
+    /// Innenhöhe der Pills oben rechts (Region, Profil), damit beide gleich hoch sind.
+    static let pillContentHeight: CGFloat = 34
 }
 
 /// Zuletzt fokussierter Titel. Nur der Hero-Bereich beobachtet ihn, die Regale nicht –

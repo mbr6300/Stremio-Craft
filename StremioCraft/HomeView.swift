@@ -19,11 +19,7 @@ struct HomeView: View {
                 HStack(alignment: .bottom, spacing: 40) {
                     HeroInfo(fallback: fallback)
                     Spacer(minLength: 0)
-                    HStack(spacing: 18) {
-                        FilterPicker()
-                        RegionMenu()
-                    }
-                    .focusSection()
+                    FilterPicker()
                 }
                 .frame(height: 165, alignment: .bottom)
                 .padding(.horizontal, Theme.pagePadding)
@@ -31,7 +27,10 @@ struct HomeView: View {
                 ShelvesList()
             }
             // Ganz oben rechts, auf Höhe des Menü-Knopfs links.
-            ActiveProfileBadge()
+            HStack(spacing: 16) {
+                RegionMenu()
+                ActiveProfileBadge()
+            }
                 .padding(.trailing, Theme.pagePadding)
                 .padding(.top, 48)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
@@ -143,6 +142,7 @@ private struct RegionMenu: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 18, weight: .bold))
             }
+            .frame(height: Theme.pillContentHeight)
         }
         .buttonStyle(PillButtonStyle())
     }
