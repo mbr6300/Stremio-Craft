@@ -241,6 +241,7 @@ struct MediaLink: View {
     var listRoute: AppRoute?
 
     @Environment(AppModel.self) private var model
+    @Environment(\.openRoute) private var openRoute
 
     var body: some View {
         NavigationLink(value: AppRoute.detail(item)) {
@@ -274,9 +275,9 @@ struct MediaLink: View {
                 }
             }
             if let listRoute {
-                // NavigationLink im Kontextmenü ist auf tvOS unzuverlässig; daher über den Deep-Link-Weg.
+                // NavigationLink im Kontextmenü ist auf tvOS unzuverlässig; daher über `openRoute`.
                 Button {
-                    model.deepLink = listRoute
+                    openRoute(listRoute)
                 } label: {
                     Label("Ganze Liste anzeigen", systemImage: "square.grid.3x3")
                 }

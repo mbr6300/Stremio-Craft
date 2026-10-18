@@ -75,6 +75,23 @@ struct RootView: View {
     }
 }
 
+/// Öffnet eine Ansicht im Navigationsstapel des aktuellen Bereichs.
+struct OpenRouteAction {
+    var action: (AppRoute) -> Void
+    func callAsFunction(_ route: AppRoute) { action(route) }
+}
+
+private struct OpenRouteKey: EnvironmentKey {
+    static let defaultValue = OpenRouteAction { _ in }
+}
+
+extension EnvironmentValues {
+    var openRoute: OpenRouteAction {
+        get { self[OpenRouteKey.self] }
+        set { self[OpenRouteKey.self] = newValue }
+    }
+}
+
 private struct NavigationTab<Root: View>: View {
     var handlesDeepLinks = false
     @ViewBuilder var root: Root
@@ -102,6 +119,8 @@ private struct NavigationTab<Root: View>: View {
                     }
                 }
         }
+        // Öffnet Ansichten im Stapel *dieses* Bereichs (z. B. aus Kontextmenüs, wo NavigationLink unzuverlässig ist).
+        .environment(\.openRoute, OpenRouteAction { path.append($0) })
         .onAppear(perform: openDeepLink)
         .onChange(of: model.deepLink) { openDeepLink() }
     }

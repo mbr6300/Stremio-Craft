@@ -223,6 +223,7 @@ private struct ContinueShelf: View {
 
 struct ContinueCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openRoute) private var openRoute
     var entry: WatchProgress
 
     var body: some View {
@@ -238,6 +239,12 @@ struct ContinueCard: View {
         }
         .buttonStyle(PosterButtonStyle())
         .contextMenu {
+            // Klick setzt direkt fort; hier geht's stattdessen zur Detailseite (Folgen, Infos, andere Streams).
+            Button {
+                openRoute(.detail(entry.media))
+            } label: {
+                Label("Details anzeigen", systemImage: "info.circle")
+            }
             Button(role: .destructive) {
                 model.removeProgress(entry)
             } label: {
