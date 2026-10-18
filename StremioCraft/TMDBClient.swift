@@ -13,6 +13,10 @@ enum TMDBClient {
         /// VMB-Konstante aus `PROVIDERS`. Prime ist dort 9; in CH liefert 9 keine Titel, 119 schon.
         var tmdbProviderId: Int
         var fallbackProviderId: Int?
+        /// Feste Katalog-Region für Anbieter, die es in der eingestellten Region nicht gibt.
+        var region: String?
+
+        var allIds: [Int] { [tmdbProviderId] + (fallbackProviderId.map { [$0] } ?? []) }
     }
 
     static let providers: [Provider] = [
@@ -20,7 +24,9 @@ enum TMDBClient {
         Provider(id: "disney", name: "Disney+", tmdbProviderId: 337, fallbackProviderId: nil),
         Provider(id: "prime", name: "Prime Video", tmdbProviderId: 9, fallbackProviderId: 119),
         Provider(id: "hbo", name: "HBO / Max", tmdbProviderId: 1899, fallbackProviderId: nil),
-        Provider(id: "paramount", name: "Paramount+", tmdbProviderId: 531, fallbackProviderId: nil)
+        Provider(id: "paramount", name: "Paramount+", tmdbProviderId: 531, fallbackProviderId: nil),
+        // Hulu gibt es nur in den USA (in CH/DE/AT laufen die Inhalte über Disney+), daher US-Katalog.
+        Provider(id: "hulu", name: "Hulu", tmdbProviderId: 15, fallbackProviderId: nil, region: "US")
     ]
 
     static func language(for country: String) -> String {
@@ -79,7 +85,7 @@ enum TMDBClient {
             query["with_genres"] = String(genre)
         }
         if !discover.providers.isEmpty {
-            query["watch_region"] = country
+            query["watch_region"] = discover.region ?? country
             query["with_watch_providers"] = discover.providers.map(String.init).joined(separator: "|")
             query["with_watch_monetization_types"] = "flatrate"
         }
@@ -150,11 +156,12 @@ enum TMDBClient {
     }
 
     static func fetchProviderRow(apiKey: String, provider: Provider, country: String) async throws -> [MediaItem] {
-        let primary = try await fetchProvider(apiKey: apiKey, providerId: provider.tmdbProviderId, country: country)
+        let region = provider.region ?? country
+        let primary = try await fetchProvider(apiKey: apiKey, providerId: provider.tmdbProviderId, country: country, region: region)
         if !primary.isEmpty || provider.fallbackProviderId == nil {
             return primary
         }
-        return try await fetchProvider(apiKey: apiKey, providerId: provider.fallbackProviderId!, country: country)
+        return try await fetchProvider(apiKey: apiKey, providerId: provider.fallbackProviderId!, country: country, region: region)
     }
 
     static func search(apiKey: String, query: String) async throws -> [MediaItem] {
@@ -256,13 +263,14 @@ enum TMDBClient {
         return try await get(url) { (payload: ExternalIDs) in payload.imdbId }
     }
 
-    private static func fetchProvider(apiKey: String, providerId: Int, country: String) async throws -> [MediaItem] {
+    /// `country` bestimmt die Sprache, `region` den Katalog (z. B. Hulu immer US).
+    private static func fetchProvider(apiKey: String, providerId: Int, country: String, region: String) async throws -> [MediaItem] {
         let lang = language(for: country)
         async let movies = discover(
             apiKey: apiKey,
             path: "/discover/movie",
             providerId: providerId,
-            country: country,
+            country: region,
             language: lang,
             movie: true
         )
@@ -270,7 +278,7 @@ enum TMDBClient {
             apiKey: apiKey,
             path: "/discover/tv",
             providerId: providerId,
-            country: country,
+            country: region,
             language: lang,
             movie: false
         )

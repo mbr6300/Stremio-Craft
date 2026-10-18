@@ -79,7 +79,7 @@ struct CatalogEntry: Codable, Identifiable, Hashable {
     var isPersonal: Bool { source == .favorites || source == .recommendations }
 
     /// Erhöhen, wenn neue Standardreihen dazukommen; bestehende Einstellungen werden dann ergänzt.
-    static let defaultsVersion = 3
+    static let defaultsVersion = 4
 
     static let defaults: [CatalogEntry] = [
         CatalogEntry(id: "favorites", title: "Meine Liste", source: .favorites),

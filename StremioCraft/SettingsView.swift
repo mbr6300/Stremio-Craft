@@ -300,7 +300,9 @@ struct ListsView: View {
         case .favorites: return "Deine Favoriten"
         case .newOnProviders: return "TMDB · Neue Titel auf Netflix, Disney+, Prime, HBO, Paramount+"
         case .recommendations: return "TMDB-Empfehlungen zu deinen Favoriten"
-        case .provider: return "TMDB · Streaming-Anbieter"
+        case .provider(let id):
+            let region = TMDBClient.providers.first { $0.id == id }?.region
+            return "TMDB · Streaming-Anbieter" + (region.map { " · \($0)-Katalog" } ?? "")
         case .url(let url): return url
         }
     }

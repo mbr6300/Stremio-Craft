@@ -11,12 +11,15 @@ struct DiscoverQuery: Hashable {
     var includeSeries = true
     var recent = false
     var sort: GenreSort = .popular
+    /// Feste Katalog-Region (z. B. Hulu → US); sonst die eingestellte Region.
+    var region: String?
 
-    /// Neu & im Trend quer über alle bekannten Plattformen (Startseiten-Reihe).
+    /// Neu & im Trend quer über die Plattformen der eingestellten Region (Startseiten-Reihe).
+    /// Anbieter mit fester anderer Region (Hulu) gehören nicht dazu.
     static var newOnAllProviders: DiscoverQuery {
         DiscoverQuery(
             title: "Neu & im Trend auf deinen Plattformen",
-            providers: TMDBClient.providers.flatMap { [$0.tmdbProviderId] + ($0.fallbackProviderId.map { [$0] } ?? []) },
+            providers: TMDBClient.providers.filter { $0.region == nil }.flatMap(\.allIds),
             recent: true
         )
     }
@@ -238,6 +241,7 @@ struct ProviderBrand {
     var name: String
     var color: Color
     var providerIds: [Int]
+    var region: String?
 
     static func brand(for id: String) -> ProviderBrand? {
         guard let provider = TMDBClient.providers.first(where: { $0.id == id }) else { return nil }
@@ -246,12 +250,14 @@ struct ProviderBrand {
             "disney": Color(red: 0.07, green: 0.24, blue: 0.81),
             "prime": Color(red: 0.0, green: 0.66, blue: 0.88),
             "hbo": Color(red: 0.42, green: 0.16, blue: 0.85),
-            "paramount": Color(red: 0.0, green: 0.39, blue: 1.0)
+            "paramount": Color(red: 0.0, green: 0.39, blue: 1.0),
+            "hulu": Color(red: 0.11, green: 0.91, blue: 0.51)
         ]
         return ProviderBrand(
             name: provider.name,
             color: colors[id] ?? Theme.accent,
-            providerIds: [provider.tmdbProviderId] + (provider.fallbackProviderId.map { [$0] } ?? [])
+            providerIds: provider.allIds,
+            region: provider.region
         )
     }
 
@@ -272,13 +278,18 @@ struct ProviderBrand {
             ("Liebesfilme", 10749, nil),
             ("Krieg", 10752, 10768)
         ]
-        return [
+        let queries = [
             DiscoverQuery(title: "Neu auf \(name)", providers: p, recent: true),
             DiscoverQuery(title: "Beliebte Filme", providers: p, includeSeries: false),
             DiscoverQuery(title: "Beliebte Serien", providers: p, includeMovies: false),
             DiscoverQuery(title: "Top bewertete Filme", providers: p, includeSeries: false, sort: .topRated),
             DiscoverQuery(title: "Top bewertete Serien", providers: p, includeMovies: false, sort: .topRated)
         ] + genres.map { DiscoverQuery(title: $0.0, providers: p, movieGenre: $0.1, tvGenre: $0.2) }
+        return queries.map { query in
+            var copy = query
+            copy.region = region
+            return copy
+        }
     }
 }
 
@@ -295,7 +306,7 @@ struct ProviderView: View {
                     .ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(brand.name.uppercased())
+                        Text(brand.name.uppercased() + (brand.region.map { "  ·  \($0)-KATALOG" } ?? ""))
                             .font(.system(size: 26, weight: .black))
                             .kerning(4)
                             .foregroundStyle(brand.color)
