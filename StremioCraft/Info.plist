@@ -16,6 +16,8 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>infuse</string>
+		<string>vlc-x-callback</string>
+		<string>vlc</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

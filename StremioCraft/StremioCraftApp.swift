@@ -32,10 +32,25 @@ enum AppTab: String, Hashable {
 /// Jeder Bereich hat seinen eigenen Navigationsstapel.
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @State private var quickMenu = false
 
     var body: some View {
+        ZStack(alignment: .leading) {
+            tabs
+                // Solange das Schnellmenü offen ist, bekommt nur es den Fokus.
+                .disabled(quickMenu)
+            if quickMenu {
+                QuickMenu(isPresented: $quickMenu)
+                    .zIndex(1)
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: quickMenu)
+        .background(LongPressLeftDetector { quickMenu = true })
+    }
+
+    private var tabs: some View {
         @Bindable var model = model
-        TabView(selection: $model.selectedTab) {
+        return TabView(selection: $model.selectedTab) {
             // Oben wie in der Apple-TV-App: aktives Profil, führt zu „Wer schaut?“.
             Tab(model.activeProfile?.name ?? "Alle", systemImage: "person.crop.circle", value: AppTab.profiles) {
                 NavigationTab { ProfilesView() }

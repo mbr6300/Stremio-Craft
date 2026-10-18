@@ -19,20 +19,24 @@ struct HomeView: View {
                 HStack(alignment: .bottom, spacing: 40) {
                     HeroInfo(fallback: fallback)
                     Spacer(minLength: 0)
-                    VStack(alignment: .trailing, spacing: 18) {
-                        ActiveProfileBadge()
-                        HStack(spacing: 18) {
-                            FilterPicker()
-                            RegionMenu()
-                        }
-                        .focusSection()
+                    HStack(spacing: 18) {
+                        FilterPicker()
+                        RegionMenu()
                     }
+                    .focusSection()
                 }
                 .frame(height: 165, alignment: .bottom)
                 .padding(.horizontal, Theme.pagePadding)
                 .padding(.bottom, Theme.headerGap)
                 ShelvesList()
             }
+            // Ganz oben rechts, auf Höhe des Menü-Knopfs links.
+            ActiveProfileBadge()
+                .padding(.trailing, Theme.pagePadding)
+                .padding(.top, 48)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .ignoresSafeArea(edges: .top)
+                .focusSection()
         }
         .environment(hero)
         .task(id: model.catalogSignature) {

@@ -169,9 +169,16 @@ enum MediaFilter: String, CaseIterable, Identifiable {
 
 enum PlayerChoice: String, Codable, CaseIterable, Identifiable {
     case infuse
+    case vlc
     case builtIn
     var id: String { rawValue }
-    var label: String { self == .infuse ? "Infuse" : "Integrierter Player" }
+    var label: String {
+        switch self {
+        case .infuse: return "Infuse"
+        case .vlc: return "VLC"
+        case .builtIn: return "Integrierter Player"
+        }
+    }
 }
 
 struct WatchProgress: Identifiable, Hashable, Codable {

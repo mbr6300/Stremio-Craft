@@ -71,12 +71,16 @@ struct PlaybackView: View {
                         .foregroundStyle(.yellow)
                         .frame(maxWidth: 1300, alignment: .leading)
                 }
-                if let lastResolved, model.player == .infuse {
+                if let lastResolved, model.player != .builtIn {
                     HStack(spacing: 20) {
-                        Button("Erneut an Infuse") { openInfuse(lastResolved.url, stream: lastResolved.stream) }
+                        Button("Erneut an \(model.player.label)") { hand(lastResolved.url, stream: lastResolved.stream, to: model.player) }
                             .buttonStyle(PillButtonStyle(prominent: true))
-                        Button("Integrierter Player") { startBuiltIn(lastResolved.url) }
+                        ForEach(PlayerChoice.allCases.filter { $0 != model.player }) { other in
+                            Button(other == .builtIn ? "Integrierter Player" : "In \(other.label)") {
+                                hand(lastResolved.url, stream: lastResolved.stream, to: other)
+                            }
                             .buttonStyle(PillButtonStyle())
+                        }
                     }
                     .focusSection()
                 }
@@ -91,6 +95,7 @@ struct PlaybackView: View {
                         .disabled(resolvingId != nil)
                         .contextMenu {
                             Button("In Infuse öffnen") { Task { await play(stream, with: .infuse) } }
+                            Button("In VLC öffnen") { Task { await play(stream, with: .vlc) } }
                             Button("Im integrierten Player") { Task { await play(stream, with: .builtIn) } }
                         }
                     }
@@ -175,10 +180,7 @@ struct PlaybackView: View {
                 url = try await RealDebridClient.resolve(token: token, infoHash: hash, fileIndex: stream.fileIndex)
             }
             lastResolved = (stream, url)
-            switch choice {
-            case .infuse: openInfuse(url, stream: stream)
-            case .builtIn: startBuiltIn(url)
-            }
+            hand(url, stream: stream, to: choice)
         } catch {
             banner = error.localizedDescription
             status = "Stream konnte nicht gestartet werden."
@@ -187,18 +189,43 @@ struct PlaybackView: View {
 
     // MARK: - Übergabe
 
+    private func hand(_ url: URL, stream: StreamCandidate, to choice: PlayerChoice) {
+        switch choice {
+        case .infuse: openInfuse(url, stream: stream)
+        case .vlc: openVLC(url)
+        case .builtIn: startBuiltIn(url)
+        }
+    }
+
     private func openInfuse(_ url: URL, stream: StreamCandidate) {
         guard let infuse = Self.infuseURL(stream: url, filename: infuseFileName(stream, url: url), position: request.resumeSeconds) else {
             banner = "Infuse-Adresse konnte nicht gebaut werden."
             return
         }
         model.beginInfuseSession(request)
-        status = "Übergabe an Infuse…"
-        UIApplication.shared.open(infuse, options: [:]) { success in
+        openExternal(infuse, app: "Infuse", missingHint: "Ist Infuse (ab Version 8.4.7) installiert?")
+    }
+
+    /// VLC für tvOS: `vlc-x-callback://x-callback-url/stream?url=…` spielt direkt ab.
+    /// VLC kann weder an einer Position starten noch die Position zurückmelden.
+    private func openVLC(_ url: URL) {
+        guard let vlc = Self.vlcURL(stream: url) else {
+            banner = "VLC-Adresse konnte nicht gebaut werden."
+            return
+        }
+        if request.resumeSeconds >= 15 {
+            banner = "VLC startet von vorne – zum Fortsetzen bei \(WatchProgress.clock(request.resumeSeconds)) vorspulen."
+        }
+        openExternal(vlc, app: "VLC", missingHint: "Ist VLC installiert?")
+    }
+
+    private func openExternal(_ target: URL, app: String, missingHint: String) {
+        status = "Übergabe an \(app)…"
+        UIApplication.shared.open(target, options: [:]) { success in
             Task { @MainActor in
                 if success {
-                    status = "In Infuse geöffnet."
-                    // Sofort in „Weiterschauen“ aufnehmen; die echte Position meldet Infuse beim Schliessen.
+                    status = "In \(app) geöffnet."
+                    // Sofort in „Weiterschauen“ aufnehmen; Infuse meldet die echte Position beim Schliessen.
                     if model.progress(for: request.media) == nil {
                         model.saveProgress(
                             media: request.media,
@@ -210,7 +237,7 @@ struct PlaybackView: View {
                         )
                     }
                 } else {
-                    banner = "Infuse liess sich nicht öffnen. Ist Infuse (ab Version 8.4.7) installiert?"
+                    banner = "\(app) liess sich nicht öffnen. \(missingHint)"
                     status = "Übergabe fehlgeschlagen."
                 }
             }
@@ -253,6 +280,14 @@ struct PlaybackView: View {
         parts.append("x-success=\(encode("stremiocraft://infuse-success"))")
         parts.append("x-error=\(encode("stremiocraft://infuse-error"))")
         return URL(string: "infuse://x-callback-url/play?" + parts.joined(separator: "&"))
+    }
+
+    static func vlcURL(stream: URL) -> URL? {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        // VLC dekodiert den Wert, wenn er mit einem kodierten „://“ beginnt.
+        guard let encoded = stream.absoluteString.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        return URL(string: "vlc-x-callback://x-callback-url/stream?url=\(encoded)")
     }
 
     static func needsInfuse(_ url: URL) -> Bool {
