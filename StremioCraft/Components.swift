@@ -55,7 +55,9 @@ struct ShelvesScroll<Content: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 8) {
+                // Bewusst kein LazyVStack: der schätzt die Höhe noch nie gezeigter Reihen, und beim
+                // ersten Aufbau verrutscht dann die Ausrichtung. Die Poster in jeder Reihe bleiben lazy.
+                VStack(alignment: .leading, spacing: 8) {
                     content
                 }
                 .padding(.top, 6)
