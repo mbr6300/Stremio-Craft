@@ -73,18 +73,22 @@ struct HeroInfo: View {
 
     var body: some View {
         if let item = hero.item ?? fallback {
+            // Feste Höhen für Titel, Infozeile und Beschreibung: der Block steht immer gleich,
+            // egal wie lang Titel oder Beschreibung sind.
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
                     .font(.system(size: 44, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                    .frame(height: 54, alignment: .bottomLeading)
                 MetaLine(item: item, imdb: imdb)
-                    .frame(height: 30)
+                    .frame(height: 30, alignment: .leading)
                 Text(item.overview)
                     .font(.system(size: 21))
                     .foregroundStyle(.white.opacity(0.75))
                     .lineLimit(2)
-                    .frame(maxWidth: 1000, alignment: .leading)
+                    .frame(maxWidth: 1000, alignment: .topLeading)
+                    .frame(height: 56, alignment: .topLeading)
             }
             .id(item.id)
             .transition(.opacity)

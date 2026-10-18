@@ -52,6 +52,26 @@ struct ShelvesScroll<Content: View>: View {
     @ViewBuilder var content: Content
     @Environment(HeroState.self) private var hero
 
+    /// Wie weit der Scrollbereich unsichtbar hinter den Kopfbereich hinaufreicht.
+    /// tvOS scrollt per Fokus nach, wenn ein Poster zu nah am oberen Rand der Liste liegt –
+    /// das lief zeitverzögert nach der eigenen Ausrichtung und schob die Reihe nach unten.
+    /// Mit diesem Vorlauf liegt die ausgerichtete Reihe weit genug vom Rand, tvOS hat nichts
+    /// mehr zu korrigieren, und Hoch/Runter funktioniert trotzdem über das normale Fokus-Scrollen.
+    static var overlap: CGFloat { 180 }
+
+    @State private var viewportHeight: CGFloat = 0
+    @State private var shelfHeights: [String: CGFloat] = [:]
+
+    /// Ankerpunkt, der die Reihe mit ihrer Oberkante genau `overlap` unter den (versteckten)
+    /// oberen Rand legt. `scrollTo` richtet den Punkt `y` der Reihe auf den Punkt `y` des
+    /// Sichtbereichs aus: Oberkante = y · (Sichtbereich − Reihenhöhe).
+    private func anchor(for id: String) -> UnitPoint {
+        let rowHeight = shelfHeights[id] ?? 0
+        let free = viewportHeight - rowHeight
+        guard free > Self.overlap else { return .top }
+        return UnitPoint(x: 0.5, y: Self.overlap / free)
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
@@ -60,17 +80,18 @@ struct ShelvesScroll<Content: View>: View {
                 VStack(alignment: .leading, spacing: 8) {
                     content
                 }
-                .padding(.top, 6)
+                .padding(.top, Self.overlap + 6)
                 // Platz, damit auch die letzte Reihe nach oben rutschen kann.
                 .padding(.bottom, 520)
             }
-            .topFadeMask()
-            // tvOS scrollt per Fokus selbst (nötig, damit weggescrollte Reihen oben erreichbar
-            // bleiben) und justiert dabei auch beim Wechsel innerhalb einer Reihe nach.
-            // Deshalb nach jedem Fokuswechsel die aktuelle Reihe wieder oben ausrichten.
+            .environment(\.shelfHeights, $shelfHeights)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+            .topFadeMask(hidden: Self.overlap)
+            .padding(.top, -Self.overlap)
+            // Fokussierte Reihe immer an dieselbe Stelle, `overlap` unter dem versteckten Rand.
             .onChange(of: hero.focusTick) {
                 guard let id = hero.shelfID else { return }
-                withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
+                withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: anchor(for: id)) }
             }
         }
     }
@@ -334,9 +355,11 @@ struct SeeAllCard: View {
 extension View {
     /// Schneidet nur oben ab (mit weichem Übergang), seitlich und unten darf Inhalt über den Rand.
     /// Nötig für vertikale Regal-Listen unter einem festen Kopfbereich.
-    func topFadeMask() -> some View {
+    /// `hidden`: oberer Bereich, der komplett unsichtbar bleibt (Vorlauf hinter dem Kopf).
+    func topFadeMask(hidden: CGFloat = 0) -> some View {
         mask {
             VStack(spacing: 0) {
+                Color.clear.frame(height: hidden)
                 LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
                     .frame(height: 14)
                 Color.black
@@ -398,8 +421,27 @@ struct Shelf<Content: View>: View {
         }
         // Luft über dem Titel, damit er auch oben ausgerichtet nicht in der Ausblendkante liegt.
         .padding(.top, 14)
+        // Höhe melden: `ShelvesScroll` braucht sie, um die Reihe exakt auszurichten.
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            guard let shelfID else { return }
+            shelfHeights?.wrappedValue[shelfID] = height
+        }
         .focusSection()
         .environment(\.shelfID, shelfID)
+    }
+
+    @Environment(\.shelfHeights) private var shelfHeights
+}
+
+private struct ShelfHeightsKey: EnvironmentKey {
+    static let defaultValue: Binding<[String: CGFloat]>? = nil
+}
+
+extension EnvironmentValues {
+    /// Gemessene Höhen der Regale, von `ShelvesScroll` bereitgestellt.
+    var shelfHeights: Binding<[String: CGFloat]>? {
+        get { self[ShelfHeightsKey.self] }
+        set { self[ShelfHeightsKey.self] = newValue }
     }
 }
 
