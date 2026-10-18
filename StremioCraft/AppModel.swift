@@ -595,6 +595,14 @@ final class AppModel {
         save(torrentio, key: torrentioKey)
     }
 
+    /// Region direkt wechseln (z. B. über die Bubble auf der Startseite); die Reihen laden neu,
+    /// weil sich `catalogSignature` ändert.
+    func setCountry(_ code: String) {
+        guard code != country else { return }
+        country = code
+        defaults.set(code, forKey: countryKey)
+    }
+
     func savePlayer(_ choice: PlayerChoice, autoPlay: Bool) {
         player = choice
         autoPlayBest = autoPlay

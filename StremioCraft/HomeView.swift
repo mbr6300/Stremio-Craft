@@ -21,7 +21,11 @@ struct HomeView: View {
                     Spacer(minLength: 0)
                     VStack(alignment: .trailing, spacing: 18) {
                         ActiveProfileBadge()
-                        FilterPicker()
+                        HStack(spacing: 18) {
+                            FilterPicker()
+                            RegionMenu()
+                        }
+                        .focusSection()
                     }
                 }
                 .frame(height: 165, alignment: .bottom)
@@ -107,6 +111,36 @@ private struct FilterPicker: View {
         .pickerStyle(.segmented)
         .frame(width: 460)
         .focusSection()
+    }
+}
+
+/// Bubble mit aktueller Region; öffnet eine Auswahl, der Wechsel lädt die Reihen neu.
+private struct RegionMenu: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let current = Region.named(model.country)
+        Menu {
+            ForEach(Region.all) { region in
+                Button {
+                    model.setCountry(region.id)
+                } label: {
+                    if region.id == model.country {
+                        Label("\(region.flag)  \(region.name)", systemImage: "checkmark")
+                    } else {
+                        Text("\(region.flag)  \(region.name)")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(current.flag)
+                Text(current.id)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 18, weight: .bold))
+            }
+        }
+        .buttonStyle(PillButtonStyle())
     }
 }
 

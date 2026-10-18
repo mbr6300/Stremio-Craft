@@ -32,10 +32,18 @@ struct DiscoverQuery: Hashable {
 /// Hält erste Seiten im Speicher, damit Zurück-Navigation nichts neu lädt.
 actor DiscoverCache {
     static let shared = DiscoverCache()
-    private var rows: [DiscoverQuery: [MediaItem]] = [:]
+
+    /// Je Region getrennt, sonst bliebe nach einem Regionswechsel der alte Katalog stehen.
+    private struct Key: Hashable {
+        var query: DiscoverQuery
+        var country: String
+    }
+
+    private var rows: [Key: [MediaItem]] = [:]
 
     func firstPage(_ query: DiscoverQuery, apiKey: String, country: String) async throws -> [MediaItem] {
-        if let hit = rows[query] { return hit }
+        let key = Key(query: query, country: country)
+        if let hit = rows[key] { return hit }
         async let movies: [MediaItem] = query.allowsMovies
             ? TMDBClient.fetchDiscover(apiKey: apiKey, country: country, query: query, type: "movie", sort: query.sort, page: 1).items
             : []
@@ -48,7 +56,7 @@ actor DiscoverCache {
             if index < m.count { mixed.append(m[index]) }
             if index < s.count { mixed.append(s[index]) }
         }
-        rows[query] = mixed
+        rows[key] = mixed
         return mixed
     }
 }
@@ -75,8 +83,8 @@ struct DiscoverShelf: View {
                 }
             }
         }
-        .task {
-            guard !loaded else { return }
+        // Lädt einmal je Region (der Cache liefert Bekanntes sofort, ohne Netz).
+        .task(id: model.country) {
             items = (try? await DiscoverCache.shared.firstPage(query, apiKey: model.tmdbAPIKey, country: model.country)) ?? []
             loaded = true
         }

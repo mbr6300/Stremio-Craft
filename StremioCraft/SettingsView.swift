@@ -22,10 +22,7 @@ struct SettingsView: View {
                     LabeledContent("Listen & Reihen", value: "\(model.catalogs.filter(\.enabled).count) aktiv")
                 }
                 Picker("Region", selection: $country) {
-                    Text("Schweiz").tag("CH")
-                    Text("Deutschland").tag("DE")
-                    Text("Österreich").tag("AT")
-                    Text("USA").tag("US")
+                    ForEach(Region.all) { Text("\($0.flag)  \($0.name)").tag($0.id) }
                 }
             }
 
@@ -109,9 +106,11 @@ struct SettingsView: View {
     }
 
     private func load() {
+        // Region immer frisch übernehmen: sie kann auf der Startseite gewechselt worden sein
+        // und darf beim Verlassen der Einstellungen nicht mit einem alten Wert überschrieben werden.
+        country = model.country
         guard !loaded else { return }
         loaded = true
-        country = model.country
         tmdbKey = model.tmdbKeyOverride
         providers = model.torrentio.providers
         sort = model.torrentio.sort

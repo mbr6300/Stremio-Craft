@@ -129,6 +129,27 @@ enum CatalogSource: Codable, Hashable {
     case url(String)
 }
 
+/// Region für Kataloge und Streaming-Verfügbarkeit (TMDB `watch_region`).
+struct Region: Identifiable, Hashable {
+    var id: String
+    var name: String
+    var flag: String
+
+    static let all: [Region] = [
+        Region(id: "CH", name: "Schweiz", flag: "🇨🇭"),
+        Region(id: "DE", name: "Deutschland", flag: "🇩🇪"),
+        Region(id: "AT", name: "Österreich", flag: "🇦🇹"),
+        Region(id: "US", name: "USA", flag: "🇺🇸"),
+        Region(id: "GB", name: "Grossbritannien", flag: "🇬🇧"),
+        Region(id: "FR", name: "Frankreich", flag: "🇫🇷"),
+        Region(id: "IT", name: "Italien", flag: "🇮🇹")
+    ]
+
+    static func named(_ id: String) -> Region {
+        all.first { $0.id == id } ?? Region(id: id, name: id, flag: "🌐")
+    }
+}
+
 /// Filter der Startseite.
 enum MediaFilter: String, CaseIterable, Identifiable {
     case all, movie, tv

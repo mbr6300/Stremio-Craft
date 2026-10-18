@@ -29,17 +29,10 @@ enum TMDBClient {
         Provider(id: "hulu", name: "Hulu", tmdbProviderId: 15, fallbackProviderId: nil, region: "US")
     ]
 
+    /// Titel und Beschreibungen bleiben in jeder Region deutsch; die Region bestimmt nur den
+    /// Katalog (was wo verfügbar ist). Fehlt eine Übersetzung, liefert TMDB das Original.
     static func language(for country: String) -> String {
-        switch country {
-        case "CH", "DE", "AT":
-            return "de-DE"
-        case "FR":
-            return "fr-FR"
-        case "IT":
-            return "it-IT"
-        default:
-            return "en-US"
-        }
+        "de-DE"
     }
 
     /// `type`: "all", "movie" oder "tv". Zwei Seiten, damit reine Film-/Serienreihen voll sind.
