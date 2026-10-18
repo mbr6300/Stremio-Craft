@@ -114,6 +114,28 @@ enum TMDBClient {
         }
     }
 
+    /// YouTube-Trailer zu einem Titel: deutsche vor englischen, Trailer vor Teasern, offizielle zuerst.
+    static func fetchTrailers(apiKey: String, tmdbId: Int, mediaType: String) async throws -> [Trailer] {
+        let type = mediaType == "tv" ? "tv" : "movie"
+        let url = try makeURL("/\(type)/\(tmdbId)/videos", [
+            "api_key": apiKey,
+            "language": "de-DE",
+            "include_video_language": "de,en,null"
+        ])
+        let videos = try await get(url) { (payload: VideosPayload) in payload.results }
+        let ranked = videos
+            .filter { $0.site == "YouTube" && ["Trailer", "Teaser"].contains($0.type ?? "") && !($0.key ?? "").isEmpty }
+            .sorted { lhs, rhs in
+                func score(_ v: VideoEntry) -> Int {
+                    (v.language == "de" ? 100 : 0) + (v.type == "Trailer" ? 10 : 0) + (v.official == true ? 1 : 0)
+                }
+                return score(lhs) > score(rhs)
+            }
+        return ranked.prefix(6).map {
+            Trailer(key: $0.key ?? "", name: $0.name ?? "Trailer", language: $0.language ?? "")
+        }
+    }
+
     /// TMDB-Empfehlungen zu einem Titel.
     static func fetchRecommendations(apiKey: String, tmdbId: Int, mediaType: String, country: String) async throws -> [MediaItem] {
         let type = mediaType == "tv" ? "tv" : "movie"
@@ -439,6 +461,32 @@ private struct SearchEntry: Decodable {
         case releaseDate = "release_date"
         case firstAirDate = "first_air_date"
         case voteAverage = "vote_average"
+    }
+}
+
+struct Trailer: Identifiable, Hashable {
+    var key: String
+    var name: String
+    var language: String
+    var id: String { key }
+    var watchURL: URL { URL(string: "https://www.youtube.com/watch?v=\(key)")! }
+}
+
+private struct VideosPayload: Decodable {
+    var results: [VideoEntry]
+}
+
+private struct VideoEntry: Decodable {
+    var key: String?
+    var name: String?
+    var site: String?
+    var type: String?
+    var official: Bool?
+    var language: String?
+
+    enum CodingKeys: String, CodingKey {
+        case key, name, site, type, official
+        case language = "iso_639_1"
     }
 }
 

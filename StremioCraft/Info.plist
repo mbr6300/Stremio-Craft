@@ -18,6 +18,8 @@
 		<string>infuse</string>
 		<string>vlc-x-callback</string>
 		<string>vlc</string>
+		<string>youtube</string>
+		<string>vnd.youtube</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

@@ -13,6 +13,7 @@ struct DetailView: View {
     @State private var highlightedSeason: Int?
     @State private var appendingSeason = false
     @State private var imdb: IMDbInfo?
+    @State private var trailers: [Trailer] = []
 
     private var shown: MediaItem { detail?.media ?? item }
     private var saved: WatchProgress? { model.progress(for: shown) }
@@ -113,6 +114,9 @@ struct DetailView: View {
                     Label("Streams wählen", systemImage: "list.bullet")
                 }
                 .buttonStyle(PillButtonStyle())
+            }
+            if !trailers.isEmpty {
+                TrailerButton(trailers: trailers)
             }
             if !isSeries, let saved, saved.position >= 15 {
                 NavigationLink(value: AppRoute.play(movieRequest(resume: 0))) {
@@ -349,6 +353,10 @@ struct DetailView: View {
             status = nil
             if let id = loaded.media.imdbId {
                 Task { imdb = await IMDbClient.shared.info(imdbId: id) }
+            }
+            let key = model.tmdbAPIKey
+            Task {
+                trailers = (try? await TMDBClient.fetchTrailers(apiKey: key, tmdbId: item.tmdbId, mediaType: item.normalizedType)) ?? []
             }
             if loaded.media.normalizedType == "tv" {
                 let season = saved?.season ?? loaded.seasons.first?.seasonNumber ?? 1
