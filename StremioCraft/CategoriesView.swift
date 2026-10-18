@@ -79,17 +79,17 @@ struct CategoriesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 36) {
+            VStack(alignment: .leading, spacing: Theme.s(36)) {
                 Text("Kategorien")
-                    .font(.system(size: 52, weight: .heavy))
+                    .font(.system(size: Theme.s(52), weight: .heavy))
                 Picker("Art", selection: $type) {
                     Text("Filme").tag("movie")
                     Text("Serien").tag("tv")
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 420)
-                .focusSection()
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 40)], spacing: 40) {
+                .frame(width: Theme.s(420))
+                .tvFocusSection()
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.s(380)), spacing: Theme.s(40))], spacing: Theme.s(40)) {
                     ForEach(genres) { genre in
                         NavigationLink(value: AppRoute.discover(genre.query(type: type))) {
                             GenreTile(genre: genre)
@@ -97,10 +97,10 @@ struct CategoriesView: View {
                         .buttonStyle(PosterButtonStyle())
                     }
                 }
-                .focusSection()
+                .tvFocusSection()
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 50)
+            .padding(.vertical, Theme.s(50))
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
@@ -122,19 +122,19 @@ private struct GenreTile: View {
                 endPoint: .bottomTrailing
             )
             Image(systemName: genre.symbol)
-                .font(.system(size: 90, weight: .semibold))
+                .font(.system(size: Theme.s(90), weight: .semibold))
                 .foregroundStyle(.white.opacity(0.18))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(20)
+                .padding(Theme.s(20))
             Text(genre.name)
-                .font(.system(size: 30, weight: .heavy))
+                .font(.system(size: Theme.s(30), weight: .heavy))
                 .foregroundStyle(.white)
-                .padding(24)
+                .padding(Theme.s(24))
         }
-        .frame(width: 380, height: 200)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .frame(width: Theme.s(380), height: Theme.s(200))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.s(18), style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.s(18), style: .continuous)
                 .strokeBorder(.white.opacity(isFocused ? 0.9 : 0), lineWidth: 4)
         }
         .scaleEffect(isFocused ? 1.08 : 1)

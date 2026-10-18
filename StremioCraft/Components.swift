@@ -6,13 +6,20 @@ enum Theme {
     static let accentDeep = Color(red: 0.16, green: 0.24, blue: 0.78)
     static let background = Color(red: 0.035, green: 0.05, blue: 0.11)
     static let surface = Color.white.opacity(0.07)
-    static let posterSize = CGSize(width: 200, height: 300)
-    static let stillSize = CGSize(width: 352, height: 198)
-    static let pagePadding: CGFloat = 80
+
+    /// Masse sind für den Fernseher (1920 pt breit) entworfen; auf dem iPad werden sie verkleinert.
+    static let scale: CGFloat = Platform.isTV ? 1 : 0.62
+
+    /// Skaliert ein TV-Mass für die aktuelle Plattform (auf tvOS unverändert).
+    static func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
+
+    static let posterSize = CGSize(width: s(200), height: s(300))
+    static let stillSize = CGSize(width: s(352), height: s(198))
+    static let pagePadding: CGFloat = Platform.isTV ? 80 : 24
     /// Abstand zwischen Kopfbereich (Titel/Beschreibung) und den Regalen darunter.
-    static let headerGap: CGFloat = 22
+    static let headerGap: CGFloat = s(22)
     /// Innenhöhe der Pills oben rechts (Region, Profil), damit beide gleich hoch sind.
-    static let pillContentHeight: CGFloat = 34
+    static let pillContentHeight: CGFloat = s(34)
 }
 
 /// Zuletzt fokussierter Titel. Nur der Hero-Bereich beobachtet ihn, die Regale nicht –
@@ -77,12 +84,12 @@ struct ShelvesScroll<Content: View>: View {
             ScrollView(.vertical, showsIndicators: false) {
                 // Bewusst kein LazyVStack: der schätzt die Höhe noch nie gezeigter Reihen, und beim
                 // ersten Aufbau verrutscht dann die Ausrichtung. Die Poster in jeder Reihe bleiben lazy.
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Theme.s(8)) {
                     content
                 }
                 .padding(.top, Self.overlap + 6)
                 // Platz, damit auch die letzte Reihe nach oben rutschen kann.
-                .padding(.bottom, 520)
+                .padding(.bottom, Theme.s(520))
             }
             .environment(\.shelfHeights, $shelfHeights)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
@@ -124,9 +131,9 @@ struct PillButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .font(.system(size: 24, weight: .semibold))
-                .padding(.horizontal, 30)
-                .padding(.vertical, 16)
+                .font(.system(size: Theme.s(24), weight: .semibold))
+                .padding(.horizontal, Theme.s(30))
+                .padding(.vertical, Theme.s(16))
                 .foregroundStyle(isFocused ? Color.black : .white)
                 .background(background, in: Capsule())
                 .scaleEffect(isFocused ? (configuration.isPressed ? 1.02 : 1.08) : 1)
@@ -157,18 +164,18 @@ struct PosterArtwork: View {
             .overlay(alignment: .bottom) {
                 if let progress, progress > 0, !watched {
                     ProgressBar(value: progress)
-                        .padding(10)
+                        .padding(Theme.s(10))
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if watched { WatchedBadge().padding(10) }
+                if watched { WatchedBadge().padding(Theme.s(10)) }
             }
             .overlay(alignment: .topLeading) {
-                if loved { LovedBadge().padding(10) }
+                if loved { LovedBadge().padding(Theme.s(10)) }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.s(14), style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.s(14), style: .continuous)
                     .strokeBorder(.white.opacity(isFocused ? 0.9 : 0), lineWidth: 4)
             }
             // Kein animierter Schatten: der kostet pro Frame einen Offscreen-Pass.
@@ -183,7 +190,7 @@ struct ProgressBar: View {
     var body: some View {
         Capsule()
             .fill(.white.opacity(0.3))
-            .frame(height: 6)
+            .frame(height: Theme.s(6))
             .overlay(alignment: .leading) {
                 GeometryReader { geo in
                     Capsule()
@@ -197,15 +204,15 @@ struct ProgressBar: View {
 /// Kennzeichnung „gesehen“ auf Postern und Folgenbildern.
 struct WatchedBadge: View {
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Theme.s(6)) {
             Image(systemName: "checkmark")
-                .font(.system(size: 16, weight: .black))
+                .font(.system(size: Theme.s(16), weight: .black))
             Text("Gesehen")
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: Theme.s(16), weight: .bold))
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.horizontal, Theme.s(10))
+        .padding(.vertical, Theme.s(5))
         .background(Theme.accent, in: Capsule())
         .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
     }
@@ -215,9 +222,9 @@ struct WatchedBadge: View {
 struct LovedBadge: View {
     var body: some View {
         Image(systemName: "heart.fill")
-            .font(.system(size: 18, weight: .bold))
+            .font(.system(size: Theme.s(18), weight: .bold))
             .foregroundStyle(.white)
-            .frame(width: 36, height: 36)
+            .frame(width: Theme.s(36), height: Theme.s(36))
             .background(Color(red: 0.93, green: 0.2, blue: 0.33), in: Circle())
             .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
     }
@@ -234,16 +241,16 @@ struct PosterCard: View {
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Theme.s(14)) {
             PosterArtwork(url: posterURL, progress: progress, watched: watched, loved: loved)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.s(2)) {
                 Text(title)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: Theme.s(22), weight: .semibold))
                     .foregroundStyle(isFocused ? .white : .white.opacity(0.7))
                     .lineLimit(1)
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.system(size: 18))
+                        .font(.system(size: Theme.s(18)))
                         .foregroundStyle(.white.opacity(0.45))
                         .lineLimit(1)
                 }
@@ -334,15 +341,15 @@ struct SeeAllCard: View {
         @Environment(HeroState.self) private var hero: HeroState?
 
         var body: some View {
-            VStack(spacing: 18) {
+            VStack(spacing: Theme.s(18)) {
                 Image(systemName: "square.grid.3x3.fill")
-                    .font(.system(size: 46))
+                    .font(.system(size: Theme.s(46)))
                 Text("Alle anzeigen")
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.system(size: Theme.s(24), weight: .bold))
             }
             .foregroundStyle(isFocused ? Color.black : .white)
             .frame(width: Theme.posterSize.width, height: Theme.posterSize.height)
-            .background(isFocused ? Color.white : Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(isFocused ? Color.white : Theme.surface, in: RoundedRectangle(cornerRadius: Theme.s(14), style: .continuous))
             .scaleEffect(isFocused ? 1.1 : 1)
             .animation(.easeOut(duration: 0.18), value: isFocused)
             .onChange(of: isFocused) { _, focused in
@@ -358,10 +365,10 @@ extension View {
     /// `hidden`: oberer Bereich, der komplett unsichtbar bleibt (Vorlauf hinter dem Kopf).
     func topFadeMask(hidden: CGFloat = 0) -> some View {
         mask {
-            VStack(spacing: 0) {
+            VStack(spacing: Theme.s(0)) {
                 Color.clear.frame(height: hidden)
                 LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 14)
+                    .frame(height: Theme.s(14))
                 Color.black
             }
             .padding(.horizontal, -400)
@@ -397,36 +404,36 @@ struct Shelf<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 14) {
+        VStack(alignment: .leading, spacing: Theme.s(4)) {
+            HStack(spacing: Theme.s(14)) {
                 Text(title)
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.system(size: Theme.s(30), weight: .bold))
                 if isLoading {
                     ProgressView().scaleEffect(0.6)
                 }
             }
             .padding(.leading, Theme.pagePadding)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 36) {
+                LazyHStack(alignment: .top, spacing: Theme.s(36)) {
                     content
                     if let seeAll {
                         SeeAllCard(route: seeAll)
                     }
                 }
                 .padding(.horizontal, Theme.pagePadding)
-                .padding(.top, 26)
-                .padding(.bottom, 44)
+                .padding(.top, Theme.s(26))
+                .padding(.bottom, Theme.s(44))
             }
             .scrollClipDisabled()
         }
         // Luft über dem Titel, damit er auch oben ausgerichtet nicht in der Ausblendkante liegt.
-        .padding(.top, 14)
+        .padding(.top, Theme.s(14))
         // Höhe melden: `ShelvesScroll` braucht sie, um die Reihe exakt auszurichten.
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
             guard let shelfID else { return }
             shelfHeights?.wrappedValue[shelfID] = height
         }
-        .focusSection()
+        .tvFocusSection()
         .environment(\.shelfID, shelfID)
     }
 
@@ -450,13 +457,13 @@ struct PlaceholderShelfItems: View {
 
     var body: some View {
         ForEach(0..<count, id: \.self) { _ in
-            VStack(alignment: .leading, spacing: 14) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+            VStack(alignment: .leading, spacing: Theme.s(14)) {
+                RoundedRectangle(cornerRadius: Theme.s(14), style: .continuous)
                     .fill(Theme.surface)
                     .frame(width: Theme.posterSize.width, height: Theme.posterSize.height)
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: Theme.s(4))
                     .fill(Theme.surface)
-                    .frame(width: 140, height: 18)
+                    .frame(width: Theme.s(140), height: Theme.s(18))
             }
         }
     }
@@ -464,18 +471,18 @@ struct PlaceholderShelfItems: View {
 
 struct EmptyHint: View {
     var text: String
-    var symbol = "sparkles.tv"
+    var symbol = "sparkles"
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: Theme.s(16)) {
             Image(systemName: symbol)
-                .font(.system(size: 30))
+                .font(.system(size: Theme.s(30)))
                 .foregroundStyle(Theme.accent)
             Text(text)
-                .font(.system(size: 24))
+                .font(.system(size: Theme.s(24)))
                 .foregroundStyle(.white.opacity(0.6))
         }
-        .padding(.vertical, 20)
+        .padding(.vertical, Theme.s(20))
     }
 }
 
@@ -543,15 +550,15 @@ struct IMDbBadge: View {
     var rating: Double
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.s(8)) {
             Text("IMDb")
-                .font(.system(size: 17, weight: .black))
+                .font(.system(size: Theme.s(17), weight: .black))
                 .foregroundStyle(.black)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: RoundedRectangle(cornerRadius: 5))
+                .padding(.horizontal, Theme.s(7))
+                .padding(.vertical, Theme.s(2))
+                .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: RoundedRectangle(cornerRadius: Theme.s(5)))
             Text(String(format: "%.1f", rating))
-                .font(.system(size: 22, weight: .bold).monospacedDigit())
+                .font(.system(size: Theme.s(22), weight: .bold).monospacedDigit())
                 .foregroundStyle(.white)
         }
     }
@@ -564,7 +571,7 @@ struct MetaLine: View {
     var extra: [String] = []
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Theme.s(14)) {
             Text([item.normalizedType == "tv" ? "Serie" : "Film", item.yearText].filter { !$0.isEmpty }.joined(separator: "  ·  "))
                 .foregroundStyle(Theme.accent)
             if let rating = imdb?.rating {
@@ -577,25 +584,25 @@ struct MetaLine: View {
             }
             if let score = imdb?.metascore {
                 Text("\(score)")
-                    .font(.system(size: 18, weight: .heavy))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(score >= 61 ? Color.green : score >= 40 ? Color.yellow : Color.red, in: RoundedRectangle(cornerRadius: 4))
+                    .font(.system(size: Theme.s(18), weight: .heavy))
+                    .padding(.horizontal, Theme.s(6))
+                    .padding(.vertical, Theme.s(1))
+                    .background(score >= 61 ? Color.green : score >= 40 ? Color.yellow : Color.red, in: RoundedRectangle(cornerRadius: Theme.s(4)))
                     .foregroundStyle(.black)
             }
             if let certificate = imdb?.certificate {
                 Text(certificate)
-                    .font(.system(size: 17, weight: .bold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.white.opacity(0.6), lineWidth: 1.5))
+                    .font(.system(size: Theme.s(17), weight: .bold))
+                    .padding(.horizontal, Theme.s(6))
+                    .padding(.vertical, Theme.s(1))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.s(4)).strokeBorder(.white.opacity(0.6), lineWidth: 1.5))
                     .foregroundStyle(.white.opacity(0.8))
             }
             ForEach(extra, id: \.self) { text in
                 Text(text).foregroundStyle(.white.opacity(0.7))
             }
         }
-        .font(.system(size: 22, weight: .semibold))
+        .font(.system(size: Theme.s(22), weight: .semibold))
         .lineLimit(1)
     }
 }

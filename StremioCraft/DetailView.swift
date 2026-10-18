@@ -25,17 +25,17 @@ struct DetailView: View {
         ZStack {
             BackdropLayer(url: shown.backdropURL)
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: Theme.s(22)) {
                     header
                         .padding(.horizontal, Theme.pagePadding)
-                        .padding(.top, 90)
+                        .padding(.top, Theme.s(90))
                     if isSeries {
                         seasonBar
                         episodeShelf
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 80)
+                .padding(.bottom, Theme.s(80))
             }
             .scrollClipDisabled()
         }
@@ -46,27 +46,27 @@ struct DetailView: View {
     // MARK: - Kopf
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Theme.s(12)) {
             Text(shown.title)
-                .font(.system(size: 54, weight: .heavy))
+                .font(.system(size: Theme.s(54), weight: .heavy))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             MetaLine(item: shown, imdb: imdb, extra: extraMeta)
-                .frame(height: 32)
+                .frame(height: Theme.s(32))
             Text(shown.overview.isEmpty ? "Keine Beschreibung." : shown.overview)
-                .font(.system(size: 22))
+                .font(.system(size: Theme.s(22)))
                 .foregroundStyle(.white.opacity(0.8))
                 .lineLimit(3)
-                .frame(maxWidth: 1050, alignment: .leading)
+                .frame(maxWidth: Theme.s(1050), alignment: .leading)
             credits
             if let status {
                 Text(status)
-                    .font(.system(size: 20))
+                    .font(.system(size: Theme.s(20)))
                     .foregroundStyle(.yellow)
             }
             actions
-                .padding(.top, 6)
-                .focusSection()
+                .padding(.top, Theme.s(6))
+                .tvFocusSection()
         }
     }
 
@@ -80,7 +80,7 @@ struct DetailView: View {
     @ViewBuilder
     private var credits: some View {
         if let imdb, !(imdb.directors.isEmpty && imdb.cast.isEmpty) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.s(6)) {
                 if !imdb.directors.isEmpty {
                     creditLine(isSeries ? "Idee" : "Regie", imdb.directors.prefix(2).joined(separator: ", "))
                 }
@@ -88,8 +88,8 @@ struct DetailView: View {
                     creditLine("Mit", imdb.cast.joined(separator: ", "))
                 }
             }
-            .font(.system(size: 20))
-            .frame(maxWidth: 1050, alignment: .leading)
+            .font(.system(size: Theme.s(20)))
+            .frame(maxWidth: Theme.s(1050), alignment: .leading)
         }
     }
 
@@ -103,7 +103,7 @@ struct DetailView: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: Theme.s(24)) {
             if let primary = primaryRequest {
                 NavigationLink(value: AppRoute.play(primary.request)) {
                     Label(primary.label, systemImage: "play.fill")
@@ -138,7 +138,7 @@ struct DetailView: View {
             } label: {
                 Image(systemName: model.isLoved(shown) ? "heart.fill" : "heart")
                     .foregroundStyle(model.isLoved(shown) ? Color(red: 0.93, green: 0.2, blue: 0.33) : .white)
-                    .frame(height: 30)
+                    .frame(height: Theme.s(30))
             }
             .buttonStyle(PillButtonStyle())
             if !isSeries {
@@ -213,7 +213,7 @@ struct DetailView: View {
     private var seasonBar: some View {
         let seasons = detail?.seasons ?? []
         return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 18) {
+            HStack(spacing: Theme.s(18)) {
                 ForEach(seasons) { season in
                     Button {
                         guard (highlightedSeason ?? selectedSeason) != season.seasonNumber
@@ -227,10 +227,10 @@ struct DetailView: View {
                 }
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 8)
+            .padding(.vertical, Theme.s(8))
         }
         .scrollClipDisabled()
-        .focusSection()
+        .tvFocusSection()
     }
 
     private var episodeShelf: some View {
@@ -243,7 +243,7 @@ struct DetailView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(alignment: .top, spacing: 40) {
+                        LazyHStack(alignment: .top, spacing: Theme.s(40)) {
                             ForEach(episodes) { episode in
                                 let watched = model.isWatched(episode, of: shown)
                                 NavigationLink(value: AppRoute.play(episodeRequest(episode))) {
@@ -291,7 +291,7 @@ struct DetailView: View {
                             }
                         }
                         .padding(.horizontal, Theme.pagePadding)
-                        .padding(.vertical, 18)
+                        .padding(.vertical, Theme.s(18))
                     }
                     .scrollClipDisabled()
                     .onAppear {
@@ -300,7 +300,7 @@ struct DetailView: View {
                         }
                     }
                 }
-                .focusSection()
+                .tvFocusSection()
             }
         }
     }
@@ -417,29 +417,29 @@ private struct EpisodeCard: View {
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.s(10)) {
             PosterArtwork(url: episode.stillURL, size: Theme.stillSize, progress: progress, symbol: "tv", watched: watched)
                 // Gesehene Folgen leicht abdunkeln, im Fokus wieder voll.
                 .opacity(watched && !isFocused ? 0.6 : 1)
                 .overlay(alignment: .topLeading) {
                     if startsSeason {
                         Text("Staffel \(episode.seasonNumber)")
-                            .font(.system(size: 18, weight: .heavy))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
+                            .font(.system(size: Theme.s(18), weight: .heavy))
+                            .padding(.horizontal, Theme.s(12))
+                            .padding(.vertical, Theme.s(5))
                             .background(.black.opacity(0.75), in: Capsule())
-                            .padding(10)
+                            .padding(Theme.s(10))
                     }
                 }
                 .onChange(of: isFocused) { _, focused in
                     if focused { onFocus() }
                 }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.s(4)) {
                 Text("\(episode.episodeNumber). \(episode.name)")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: Theme.s(22), weight: .semibold))
                     .lineLimit(1)
                 Text(episode.overview.isEmpty ? episode.label : episode.overview)
-                    .font(.system(size: 18))
+                    .font(.system(size: Theme.s(18)))
                     .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(2)
             }

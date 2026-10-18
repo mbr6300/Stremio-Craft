@@ -35,6 +35,7 @@ struct RootView: View {
     @State private var quickMenu = false
 
     var body: some View {
+        #if os(tvOS)
         ZStack(alignment: .leading) {
             tabs
                 // Solange das Schnellmenü offen ist, bekommt nur es den Fokus.
@@ -46,6 +47,10 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.25), value: quickMenu)
         .background(LongPressLeftDetector { quickMenu = true })
+        #else
+        // iPad: Tab-Leiste bzw. Seitenleiste des Systems, kein Fernbedienungs-Schnellmenü nötig.
+        tabs
+        #endif
     }
 
     private var tabs: some View {
@@ -55,7 +60,7 @@ struct RootView: View {
             Tab(model.activeProfile?.name ?? "Alle", systemImage: "person.crop.circle", value: AppTab.profiles) {
                 NavigationTab { ProfilesView() }
             }
-            Tab("Entdecken", systemImage: "sparkles.tv", value: AppTab.home) {
+            Tab("Entdecken", systemImage: Platform.isTV ? "sparkles.tv" : "sparkles", value: AppTab.home) {
                 NavigationTab(handlesDeepLinks: true) { HomeView() }
             }
             Tab("Kategorien", systemImage: "square.grid.2x2", value: AppTab.categories) {

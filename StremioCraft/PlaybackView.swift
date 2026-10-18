@@ -48,31 +48,31 @@ struct PlaybackView: View {
 
     private var streamList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: Theme.s(18)) {
                 Text(request.media.title)
-                    .font(.system(size: 56, weight: .heavy))
+                    .font(.system(size: Theme.s(56), weight: .heavy))
                     .lineLimit(1)
                 if let label = request.episodeLabel {
                     Text("\(label)  ·  \(request.episodeTitle ?? "")")
-                        .font(.system(size: 26, weight: .semibold))
+                        .font(.system(size: Theme.s(26), weight: .semibold))
                         .foregroundStyle(Theme.accent)
                 }
-                HStack(spacing: 14) {
+                HStack(spacing: Theme.s(14)) {
                     if isLoading || resolvingId != nil {
                         ProgressView()
                     }
                     Text(status)
-                        .font(.system(size: 22))
+                        .font(.system(size: Theme.s(22)))
                         .foregroundStyle(.white.opacity(0.7))
                 }
                 if let notice = banner ?? model.playbackNotice {
                     Label(notice, systemImage: "info.circle")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: Theme.s(22), weight: .semibold))
                         .foregroundStyle(.yellow)
-                        .frame(maxWidth: 1300, alignment: .leading)
+                        .frame(maxWidth: Theme.s(1300), alignment: .leading)
                 }
                 if let lastResolved, model.player != .builtIn {
-                    HStack(spacing: 20) {
+                    HStack(spacing: Theme.s(20)) {
                         Button("Erneut an \(model.player.label)") { hand(lastResolved.url, stream: lastResolved.stream, to: model.player) }
                             .buttonStyle(PillButtonStyle(prominent: true))
                         ForEach(PlayerChoice.allCases.filter { $0 != model.player }) { other in
@@ -82,16 +82,16 @@ struct PlaybackView: View {
                             .buttonStyle(PillButtonStyle())
                         }
                     }
-                    .focusSection()
+                    .tvFocusSection()
                 }
-                LazyVStack(alignment: .leading, spacing: 18) {
+                LazyVStack(alignment: .leading, spacing: Theme.s(18)) {
                     ForEach(streams) { stream in
                         Button {
                             Task { await play(stream, with: model.player) }
                         } label: {
                             StreamRow(stream: stream, isResolving: resolvingId == stream.id)
                         }
-                        .buttonStyle(.card)
+                        .cardButtonStyle()
                         .disabled(resolvingId != nil)
                         .contextMenu {
                             Button("In Infuse öffnen") { Task { await play(stream, with: .infuse) } }
@@ -100,11 +100,11 @@ struct PlaybackView: View {
                         }
                     }
                 }
-                .padding(.top, 12)
-                .focusSection()
+                .padding(.top, Theme.s(12))
+                .tvFocusSection()
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 60)
+            .padding(.vertical, Theme.s(60))
         }
     }
 
@@ -301,26 +301,26 @@ private struct StreamRow: View {
     var isResolving: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 22) {
-            VStack(spacing: 8) {
+        HStack(alignment: .center, spacing: Theme.s(22)) {
+            VStack(spacing: Theme.s(8)) {
                 Text(qualityBadge)
-                    .font(.system(size: 22, weight: .heavy))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
+                    .font(.system(size: Theme.s(22), weight: .heavy))
+                    .padding(.horizontal, Theme.s(14))
+                    .padding(.vertical, Theme.s(6))
                     .background(Theme.accent.opacity(stream.rank >= 80 ? 1 : 0.45), in: Capsule())
                 if stream.isCached {
                     Label("Sofort", systemImage: "bolt.fill")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: Theme.s(16), weight: .bold))
                         .foregroundStyle(.yellow)
                 }
             }
-            .frame(width: 140)
-            VStack(alignment: .leading, spacing: 6) {
+            .frame(width: Theme.s(140))
+            VStack(alignment: .leading, spacing: Theme.s(6)) {
                 Text(stream.quality)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: Theme.s(22), weight: .semibold))
                     .lineLimit(1)
                 Text(stream.title.replacingOccurrences(of: "\n", with: "  ·  "))
-                    .font(.system(size: 18))
+                    .font(.system(size: Theme.s(18)))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -329,13 +329,13 @@ private struct StreamRow: View {
                 ProgressView()
             } else {
                 Text(stream.size)
-                    .font(.system(size: 20, weight: .semibold).monospacedDigit())
+                    .font(.system(size: Theme.s(20), weight: .semibold).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-        .frame(width: 1400, alignment: .leading)
+        .padding(.horizontal, Theme.s(24))
+        .padding(.vertical, Theme.s(16))
+        .frame(maxWidth: Theme.s(1400), alignment: .leading)
     }
 
     private var qualityBadge: String {
@@ -364,9 +364,9 @@ struct PlayerScreen: View {
             if let failure {
                 Text("\(failure) Dieses Format braucht vermutlich Infuse.")
                     .font(.headline)
-                    .padding(16)
-                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
-                    .padding(36)
+                    .padding(Theme.s(16))
+                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: Theme.s(12)))
+                    .padding(Theme.s(36))
             }
         }
         .onAppear {

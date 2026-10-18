@@ -1,6 +1,6 @@
 import SwiftUI
 
-private let gridColumns = [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: 44)]
+private let gridColumns = [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: Theme.s(44))]
 
 struct SearchView: View {
     @Environment(AppModel.self) private var model
@@ -11,7 +11,7 @@ struct SearchView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: Theme.s(24)) {
                 if isSearching {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -22,16 +22,16 @@ struct SearchView: View {
                         EmptyHint(text: message, symbol: "magnifyingglass")
                     }
                 } else {
-                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 56) {
+                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Theme.s(56)) {
                         ForEach(results) { item in
                             MediaLink(item: item, subtitle: item.metaText)
                         }
                     }
-                    .focusSection()
+                    .tvFocusSection()
                 }
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 40)
+            .padding(.vertical, Theme.s(40))
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
@@ -56,15 +56,15 @@ struct SearchView: View {
     }
 
     private var recentSearches: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 24) {
+        VStack(alignment: .leading, spacing: Theme.s(20)) {
+            HStack(spacing: Theme.s(24)) {
                 Text("Zuletzt gesucht")
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.system(size: Theme.s(30), weight: .bold))
                 Spacer()
                 Button("Verlauf löschen") { model.clearRecentSearches() }
                     .buttonStyle(PillButtonStyle())
             }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 24)], alignment: .leading, spacing: 24) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.s(300)), spacing: Theme.s(24))], alignment: .leading, spacing: Theme.s(24)) {
                 ForEach(model.recentSearches, id: \.self) { term in
                     Button {
                         query = term
@@ -80,7 +80,7 @@ struct SearchView: View {
                 }
             }
         }
-        .focusSection()
+        .tvFocusSection()
     }
 
     private func search() async {
@@ -115,12 +115,12 @@ struct LibraryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: Theme.s(28)) {
                 section("Weiterschauen") {
                     if model.continueWatching.isEmpty {
                         EmptyHint(text: "Noch nichts angefangen.", symbol: "play.circle")
                     } else {
-                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 56) {
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Theme.s(56)) {
                             ForEach(model.continueWatching) { entry in
                                 ContinueCard(entry: entry)
                             }
@@ -131,7 +131,7 @@ struct LibraryView: View {
                     if model.favorites.isEmpty {
                         EmptyHint(text: "Auf der Detailseite mit „Meine Liste“ merken.", symbol: "plus")
                     } else {
-                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 56) {
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Theme.s(56)) {
                             ForEach(model.favorites) { favorite in
                                 MediaLink(item: favorite.media, subtitle: favorite.year.map(String.init))
                             }
@@ -142,7 +142,7 @@ struct LibraryView: View {
                     if model.loved.isEmpty {
                         EmptyHint(text: "Titel, die du besonders magst, mit ♥ markieren – sie prägen die Empfehlungen.", symbol: "heart")
                     } else {
-                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 56) {
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Theme.s(56)) {
                             ForEach(model.loved) { item in
                                 MediaLink(item: item.media, subtitle: item.year.map(String.init))
                             }
@@ -151,18 +151,18 @@ struct LibraryView: View {
                 }
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 40)
+            .padding(.vertical, Theme.s(40))
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: Theme.s(24)) {
             Text(title)
-                .font(.system(size: 34, weight: .bold))
+                .font(.system(size: Theme.s(34), weight: .bold))
             content()
         }
-        .focusSection()
+        .tvFocusSection()
     }
 }

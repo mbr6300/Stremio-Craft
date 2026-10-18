@@ -65,27 +65,27 @@ private struct TrailerQRView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 36) {
+        VStack(spacing: Theme.s(36)) {
             Text(trailer.name)
-                .font(.system(size: 40, weight: .heavy))
+                .font(.system(size: Theme.s(40), weight: .heavy))
                 .multilineTextAlignment(.center)
             if let image = Self.qrCode(trailer.watchURL.absoluteString) {
                 Image(uiImage: image)
                     .interpolation(.none)
                     .resizable()
-                    .frame(width: 420, height: 420)
-                    .padding(24)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 24))
+                    .frame(width: Theme.s(420), height: Theme.s(420))
+                    .padding(Theme.s(24))
+                    .background(.white, in: RoundedRectangle(cornerRadius: Theme.s(24)))
             }
             Text("Die YouTube-App ist nicht installiert. Code mit dem Handy scannen, um den Trailer dort anzusehen.")
-                .font(.system(size: 24))
+                .font(.system(size: Theme.s(24)))
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 900)
+                .frame(maxWidth: Theme.s(900))
             Button("Schliessen") { dismiss() }
                 .buttonStyle(PillButtonStyle(prominent: true))
         }
-        .padding(60)
+        .padding(Theme.s(60))
     }
 
     private static func qrCode(_ text: String) -> UIImage? {

@@ -104,7 +104,7 @@ struct DiscoverGridView: View {
     @State private var isLoading = false
     @State private var message: String?
 
-    private let columns = [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: 44)]
+    private let columns = [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: Theme.s(44))]
 
     private var title: String {
         guard query.allowsMovies != query.allowsSeries else { return query.title }
@@ -113,27 +113,27 @@ struct DiscoverGridView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
+            VStack(alignment: .leading, spacing: Theme.s(30)) {
                 Text(title)
-                    .font(.system(size: 52, weight: .heavy))
-                HStack(spacing: 20) {
+                    .font(.system(size: Theme.s(52), weight: .heavy))
+                HStack(spacing: Theme.s(20)) {
                     if query.allowsMovies && query.allowsSeries {
                         Button("Filme") { type = "movie" }
                             .buttonStyle(PillButtonStyle(selected: type == "movie"))
                         Button("Serien") { type = "tv" }
                             .buttonStyle(PillButtonStyle(selected: type == "tv"))
-                        Divider().frame(height: 40)
+                        Divider().frame(height: Theme.s(40))
                     }
                     ForEach(GenreSort.allCases) { option in
                         Button(option.label) { sort = option }
                             .buttonStyle(PillButtonStyle(selected: sort == option))
                     }
                 }
-                .focusSection()
+                .tvFocusSection()
                 if let message, items.isEmpty {
                     EmptyHint(text: message, symbol: "exclamationmark.triangle")
                 }
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.s(56)) {
                     ForEach(items) { item in
                         MediaLink(item: item)
                             .onAppear {
@@ -144,13 +144,13 @@ struct DiscoverGridView: View {
                         PlaceholderShelfItems(count: 14)
                     }
                 }
-                .focusSection()
+                .tvFocusSection()
                 if isLoading && !items.isEmpty {
                     ProgressView().frame(maxWidth: .infinity)
                 }
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 50)
+            .padding(.vertical, Theme.s(50))
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
@@ -205,38 +205,38 @@ struct RowGridView: View {
     var rowId: String
     @State private var filter: MediaFilter = .all
 
-    private let columns = [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: 44)]
+    private let columns = [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: Theme.s(44))]
 
     var body: some View {
         let row = model.rows.first { $0.id == rowId }
         let items = (row?.items ?? []).filter(filter.matches)
         ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
+            VStack(alignment: .leading, spacing: Theme.s(30)) {
                 Text(row?.title ?? "Liste")
-                    .font(.system(size: 52, weight: .heavy))
-                HStack(spacing: 20) {
+                    .font(.system(size: Theme.s(52), weight: .heavy))
+                HStack(spacing: Theme.s(20)) {
                     ForEach(MediaFilter.allCases) { option in
                         Button(option.label) { filter = option }
                             .buttonStyle(PillButtonStyle(selected: filter == option))
                     }
                     Text("\(items.count) Titel")
-                        .font(.system(size: 22))
+                        .font(.system(size: Theme.s(22)))
                         .foregroundStyle(.white.opacity(0.5))
-                        .padding(.leading, 10)
+                        .padding(.leading, Theme.s(10))
                 }
-                .focusSection()
+                .tvFocusSection()
                 if items.isEmpty {
                     EmptyHint(text: row?.isLoading == true ? "Wird geladen…" : "Keine Titel.", symbol: "tray")
                 }
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.s(56)) {
                     ForEach(items) { item in
                         MediaLink(item: item)
                     }
                 }
-                .focusSection()
+                .tvFocusSection()
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 50)
+            .padding(.vertical, Theme.s(50))
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
@@ -312,16 +312,16 @@ struct ProviderView: View {
                 // Markenfarbe als Schimmer von oben, damit sich die Seite wie die Plattform anfühlt.
                 LinearGradient(colors: [brand.color.opacity(0.45), .clear], startPoint: .top, endPoint: .center)
                     .ignoresSafeArea()
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.s(0)) {
+                    VStack(alignment: .leading, spacing: Theme.s(6)) {
                         Text(brand.name.uppercased() + (brand.region.map { "  ·  \($0)-KATALOG" } ?? ""))
-                            .font(.system(size: 26, weight: .black))
+                            .font(.system(size: Theme.s(26), weight: .black))
                             .kerning(4)
                             .foregroundStyle(brand.color)
                             .brightness(0.15)
                         HeroInfo(fallback: nil, placeholder: "Neu, beliebt und nach Genres")
                     }
-                    .frame(height: 185, alignment: .bottomLeading)
+                    .frame(height: Theme.s(185), alignment: .bottomLeading)
                     .padding(.horizontal, Theme.pagePadding)
                     .padding(.bottom, Theme.headerGap)
                     ShelvesScroll {

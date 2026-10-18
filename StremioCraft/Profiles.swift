@@ -63,11 +63,11 @@ struct ProfilesView: View {
     @State private var editTarget: Profile?
 
     var body: some View {
-        VStack(spacing: 60) {
+        VStack(spacing: Theme.s(60)) {
             Spacer(minLength: 0)
             Text(editing ? "Profile verwalten" : "Wer schaut?")
-                .font(.system(size: 60, weight: .heavy))
-            HStack(alignment: .top, spacing: 56) {
+                .font(.system(size: Theme.s(60), weight: .heavy))
+            HStack(alignment: .top, spacing: Theme.s(56)) {
                 if !editing {
                     ProfileTile(name: "Alle", avatar: nil, isActive: model.activeProfileID == nil, editing: false) {
                         choose(nil)
@@ -88,12 +88,12 @@ struct ProfilesView: View {
                     }
                 }
             }
-            .focusSection()
+            .tvFocusSection()
             Text(subtitle)
-                .font(.system(size: 22))
+                .font(.system(size: Theme.s(22)))
                 .foregroundStyle(.white.opacity(0.55))
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 1100)
+                .frame(maxWidth: Theme.s(1100))
             if !model.profiles.isEmpty {
                 Button(editing ? "Fertig" : "Profile verwalten") { editing.toggle() }
                     .buttonStyle(PillButtonStyle(selected: editing))
@@ -140,8 +140,8 @@ private struct ProfileTile: View {
         @Environment(\.isFocused) private var isFocused
 
         var body: some View {
-            VStack(spacing: 20) {
-                AvatarView(avatar: avatar, size: 200)
+            VStack(spacing: Theme.s(20)) {
+                AvatarView(avatar: avatar, size: Theme.s(200))
                     .overlay {
                         Circle().strokeBorder(.white.opacity(isFocused ? 1 : (isActive ? 0.5 : 0)), lineWidth: isFocused ? 6 : 4)
                     }
@@ -154,19 +154,19 @@ private struct ProfileTile: View {
                     }
                     .scaleEffect(isFocused ? 1.1 : 1)
                 Text(name)
-                    .font(.system(size: 28, weight: isFocused || isActive ? .bold : .medium))
+                    .font(.system(size: Theme.s(28), weight: isFocused || isActive ? .bold : .medium))
                     .foregroundStyle(isFocused ? .white : .white.opacity(0.7))
                     .lineLimit(1)
-                    .frame(width: 220)
+                    .frame(width: Theme.s(220))
             }
             .animation(.easeOut(duration: 0.18), value: isFocused)
         }
 
         private func badge(_ symbol: String, color: Color, foreground: Color) -> some View {
             Image(systemName: symbol)
-                .font(.system(size: 26, weight: .heavy))
+                .font(.system(size: Theme.s(26), weight: .heavy))
                 .foregroundStyle(foreground)
-                .frame(width: 54, height: 54)
+                .frame(width: Theme.s(54), height: Theme.s(54))
                 .background(color, in: Circle())
         }
     }
@@ -186,17 +186,17 @@ private struct AddProfileTile: View {
         @Environment(\.isFocused) private var isFocused
 
         var body: some View {
-            VStack(spacing: 20) {
+            VStack(spacing: Theme.s(20)) {
                 Image(systemName: "plus")
-                    .font(.system(size: 70, weight: .semibold))
+                    .font(.system(size: Theme.s(70), weight: .semibold))
                     .foregroundStyle(isFocused ? .black : .white.opacity(0.7))
-                    .frame(width: 200, height: 200)
+                    .frame(width: Theme.s(200), height: Theme.s(200))
                     .background(isFocused ? Color.white : Theme.surface, in: Circle())
                     .scaleEffect(isFocused ? 1.1 : 1)
                 Text("Profil hinzufügen")
-                    .font(.system(size: 28, weight: .medium))
+                    .font(.system(size: Theme.s(28), weight: .medium))
                     .foregroundStyle(.white.opacity(isFocused ? 1 : 0.7))
-                    .frame(width: 240)
+                    .frame(width: Theme.s(240))
             }
             .animation(.easeOut(duration: 0.18), value: isFocused)
         }
@@ -212,20 +212,20 @@ struct ProfileEditView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 40) {
-                HStack(spacing: 40) {
-                    AvatarView(avatar: profile.avatar, size: 180)
-                    VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Theme.s(40)) {
+                HStack(spacing: Theme.s(40)) {
+                    AvatarView(avatar: profile.avatar, size: Theme.s(180))
+                    VStack(alignment: .leading, spacing: Theme.s(16)) {
                         Text(isNew ? "Neues Profil" : "Profil bearbeiten")
-                            .font(.system(size: 52, weight: .heavy))
+                            .font(.system(size: Theme.s(52), weight: .heavy))
                         TextField("Name", text: $profile.name)
-                            .frame(width: 700)
+                            .frame(width: Theme.s(700))
                     }
                 }
-                .focusSection()
+                .tvFocusSection()
                 Text("Avatar wählen")
-                    .font(.system(size: 30, weight: .bold))
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 30)], alignment: .leading, spacing: 30) {
+                    .font(.system(size: Theme.s(30), weight: .bold))
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.s(130)), spacing: Theme.s(30))], alignment: .leading, spacing: Theme.s(30)) {
                     ForEach(Avatar.all, id: \.self) { avatar in
                         Button {
                             profile.avatar = avatar
@@ -235,8 +235,8 @@ struct ProfileEditView: View {
                         .buttonStyle(PosterButtonStyle())
                     }
                 }
-                .focusSection()
-                HStack(spacing: 24) {
+                .tvFocusSection()
+                HStack(spacing: Theme.s(24)) {
                     Button(isNew ? "Profil anlegen" : "Sichern") {
                         let saved = model.saveProfile(profile)
                         if isNew { model.switchProfile(to: saved.id) }
@@ -251,10 +251,10 @@ struct ProfileEditView: View {
                         .buttonStyle(PillButtonStyle())
                     }
                 }
-                .focusSection()
+                .tvFocusSection()
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 60)
+            .padding(.vertical, Theme.s(60))
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
@@ -266,7 +266,7 @@ struct ProfileEditView: View {
         @Environment(\.isFocused) private var isFocused
 
         var body: some View {
-            AvatarView(avatar: avatar, size: 120)
+            AvatarView(avatar: avatar, size: Theme.s(120))
                 .overlay {
                     Circle().strokeBorder(.white.opacity(isFocused ? 1 : (selected ? 0.8 : 0)), lineWidth: 5)
                 }
@@ -285,7 +285,7 @@ struct ActiveProfileBadge: View {
             model.selectedTab = .profiles
         } label: {
             // Gleiche Pill-Höhe wie die Regionen-Bubble daneben.
-            HStack(spacing: 12) {
+            HStack(spacing: Theme.s(12)) {
                 Text(model.activeProfile?.name ?? "Alle")
                 AvatarView(avatar: model.activeProfile?.avatar, size: Theme.pillContentHeight)
             }

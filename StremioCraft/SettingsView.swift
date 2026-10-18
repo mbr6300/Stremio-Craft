@@ -85,7 +85,7 @@ struct SettingsView: View {
 
             if isBusy || !status.isEmpty {
                 Section {
-                    HStack(spacing: 16) {
+                    HStack(spacing: Theme.s(16)) {
                         if isBusy { ProgressView() }
                         Text(status).foregroundStyle(.yellow)
                     }
@@ -173,9 +173,9 @@ struct ListsView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 36) {
+                VStack(alignment: .leading, spacing: Theme.s(36)) {
                     Text("Listen & Reihen")
-                        .font(.system(size: 52, weight: .heavy))
+                        .font(.system(size: Theme.s(52), weight: .heavy))
                     rowsSection(proxy)
                     addSection
                         .disabled(picked != nil)
@@ -184,7 +184,7 @@ struct ListsView: View {
                         .disabled(picked != nil)
                 }
                 .padding(.horizontal, Theme.pagePadding)
-                .padding(.vertical, 50)
+                .padding(.vertical, Theme.s(50))
             }
             .scrollClipDisabled()
         }
@@ -194,10 +194,10 @@ struct ListsView: View {
     // MARK: - Reihen
 
     private func rowsSection(_ proxy: ScrollViewProxy) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 24) {
+        VStack(alignment: .leading, spacing: Theme.s(18)) {
+            HStack(spacing: Theme.s(24)) {
                 Text("Reihen auf der Startseite")
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: Theme.s(32), weight: .bold))
                 Spacer()
                 Button(reorderMode ? "Fertig" : "Reihenfolge ändern") {
                     reorderMode.toggle()
@@ -207,9 +207,9 @@ struct ListsView: View {
                 .disabled(picked != nil)
             }
             Text(hint)
-                .font(.system(size: 21))
+                .font(.system(size: Theme.s(21)))
                 .foregroundStyle(picked == nil ? .white.opacity(0.55) : Theme.accent)
-            VStack(spacing: 12) {
+            VStack(spacing: Theme.s(12)) {
                 ForEach(model.catalogs) { entry in
                     CatalogRowButton(
                         entry: entry,
@@ -245,7 +245,7 @@ struct ListsView: View {
                     }
                 }
             }
-            .focusSection()
+            .tvFocusSection()
         }
     }
 
@@ -258,18 +258,18 @@ struct ListsView: View {
     // MARK: - Eigene Liste
 
     private var addSection: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: Theme.s(18)) {
             Text("Eigene Liste hinzufügen")
-                .font(.system(size: 32, weight: .bold))
+                .font(.system(size: Theme.s(32), weight: .bold))
             TextField("Adresse der Liste", text: $url)
-                .frame(maxWidth: 1200)
+                .frame(maxWidth: Theme.s(1200))
             TextField("Name (optional)", text: $title)
-                .frame(maxWidth: 1200)
-            HStack(spacing: 18) {
+                .frame(maxWidth: Theme.s(1200))
+            HStack(spacing: Theme.s(18)) {
                 Button {
                     Task { await add() }
                 } label: {
-                    HStack(spacing: 14) {
+                    HStack(spacing: Theme.s(14)) {
                         if isAdding { ProgressView() }
                         Text(isAdding ? "Liste wird geladen…" : "Liste hinzufügen")
                     }
@@ -285,11 +285,11 @@ struct ListsView: View {
             MDBList (mdblist.com/lists/…), TMDB-Listen (themoviedb.org/list/…), Stremio-Addon-Kataloge (…/manifest.json \
             oder …/catalog/…json) sowie jede Seite mit IMDb-IDs. Maximal \(ListClient.maxItems) Titel pro Liste.
             """)
-            .font(.system(size: 19))
+            .font(.system(size: Theme.s(19)))
             .foregroundStyle(.white.opacity(0.5))
-            .frame(maxWidth: 1300, alignment: .leading)
+            .frame(maxWidth: Theme.s(1300), alignment: .leading)
         }
-        .focusSection()
+        .tvFocusSection()
     }
 
     private func sourceText(_ source: CatalogSource) -> String {
@@ -335,6 +335,7 @@ private struct CatalogRowButton: View {
     var onDrop: () -> Void
 
     var body: some View {
+        #if os(tvOS)
         Button(action: action) {
             RowLabel(entry: entry, source: source, reorderMode: reorderMode, isPicked: isPicked)
         }
@@ -349,7 +350,24 @@ private struct CatalogRowButton: View {
             default: break
             }
         }
-        .onExitCommand(perform: isPicked ? onDrop : nil)
+        .tvOnExitCommand(perform: isPicked ? onDrop : nil)
+        #else
+        // iPad: keine Pfeiltasten – die angehobene Reihe bekommt Knöpfe zum Verschieben.
+        HStack(spacing: Theme.s(12)) {
+            Button(action: action) {
+                RowLabel(entry: entry, source: source, reorderMode: reorderMode, isPicked: isPicked)
+            }
+            .buttonStyle(RowButtonStyle(isPicked: isPicked))
+            if isPicked {
+                Button { onMove(-1) } label: { Image(systemName: "arrow.up") }
+                    .buttonStyle(PillButtonStyle())
+                Button { onMove(1) } label: { Image(systemName: "arrow.down") }
+                    .buttonStyle(PillButtonStyle())
+            }
+        }
+        .disabled(isLocked)
+        .opacity(isLocked ? 0.45 : 1)
+        #endif
     }
 
     private struct RowLabel: View {
@@ -359,31 +377,31 @@ private struct CatalogRowButton: View {
         var isPicked: Bool
 
         var body: some View {
-            HStack(spacing: 22) {
+            HStack(spacing: Theme.s(22)) {
                 Image(systemName: entry.enabled ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 30))
+                    .font(.system(size: Theme.s(30)))
                     .foregroundStyle(entry.enabled ? Theme.accent : .white.opacity(0.4))
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Theme.s(4)) {
                     Text(entry.title)
-                        .font(.system(size: 26, weight: .semibold))
+                        .font(.system(size: Theme.s(26), weight: .semibold))
                     Text(source)
-                        .font(.system(size: 18))
+                        .font(.system(size: Theme.s(18)))
                         .opacity(0.6)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 20)
                 if isPicked {
                     Image(systemName: "arrow.up.arrow.down")
-                        .font(.system(size: 28, weight: .bold))
+                        .font(.system(size: Theme.s(28), weight: .bold))
                 } else if reorderMode {
                     Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.system(size: Theme.s(28), weight: .semibold))
                         .opacity(0.6)
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 16)
-            .frame(maxWidth: 1400, alignment: .leading)
+            .padding(.horizontal, Theme.s(28))
+            .padding(.vertical, Theme.s(16))
+            .frame(maxWidth: Theme.s(1400), alignment: .leading)
         }
     }
 
@@ -402,7 +420,7 @@ private struct CatalogRowButton: View {
             var body: some View {
                 configuration.label
                     .foregroundStyle(isFocused && !isPicked ? Color.black : .white)
-                    .background(background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(background, in: RoundedRectangle(cornerRadius: Theme.s(16), style: .continuous))
                     .scaleEffect(isPicked ? 1.04 : (isFocused ? 1.02 : 1))
                     .shadow(color: .black.opacity(isPicked ? 0.5 : 0), radius: 16, y: 8)
                     .animation(.easeOut(duration: 0.15), value: isFocused)

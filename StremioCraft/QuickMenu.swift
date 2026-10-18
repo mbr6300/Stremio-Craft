@@ -58,51 +58,51 @@ struct QuickMenu: View {
     ]
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 14) {
+        HStack(spacing: Theme.s(0)) {
+            VStack(alignment: .leading, spacing: Theme.s(14)) {
                 Button {
                     select(.profiles)
                 } label: {
-                    HStack(spacing: 18) {
-                        AvatarView(avatar: model.activeProfile?.avatar, size: 56)
-                        VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: Theme.s(18)) {
+                        AvatarView(avatar: model.activeProfile?.avatar, size: Theme.s(56))
+                        VStack(alignment: .leading, spacing: Theme.s(2)) {
                             Text(model.activeProfile?.name ?? "Alle")
-                                .font(.system(size: 26, weight: .bold))
+                                .font(.system(size: Theme.s(26), weight: .bold))
                             Text("Profil wechseln")
-                                .font(.system(size: 18))
+                                .font(.system(size: Theme.s(18)))
                                 .opacity(0.6)
                         }
                     }
                 }
                 .buttonStyle(MenuEntryStyle(isCurrent: model.selectedTab == .profiles))
                 .focused($focused, equals: .profiles)
-                .padding(.bottom, 16)
+                .padding(.bottom, Theme.s(16))
 
                 ForEach(entries, id: \.0) { tab, title, symbol in
                     Button {
                         select(tab)
                     } label: {
                         Label(title, systemImage: symbol)
-                            .font(.system(size: 28, weight: .semibold))
+                            .font(.system(size: Theme.s(28), weight: .semibold))
                     }
                     .buttonStyle(MenuEntryStyle(isCurrent: model.selectedTab == tab))
                     .focused($focused, equals: tab)
                 }
                 Spacer()
             }
-            .padding(.horizontal, 36)
-            .padding(.vertical, 60)
-            .frame(width: 480, alignment: .leading)
+            .padding(.horizontal, Theme.s(36))
+            .padding(.vertical, Theme.s(60))
+            .frame(width: Theme.s(480), alignment: .leading)
             .frame(maxHeight: .infinity)
             .background(.ultraThinMaterial)
             .background(Theme.background.opacity(0.6))
-            .focusSection()
+            .tvFocusSection()
 
             // Rechts abdunkeln; ein Fokuswechsel dorthin gibt es nicht, das Menü bleibt bis Auswahl/Zurück offen.
             Color.black.opacity(0.45)
         }
         .ignoresSafeArea()
-        .onExitCommand { isPresented = false }
+        .tvOnExitCommand { isPresented = false }
         .onAppear { focused = model.selectedTab }
         .transition(.move(edge: .leading).combined(with: .opacity))
     }
@@ -127,12 +127,12 @@ struct QuickMenu: View {
             var body: some View {
                 configuration.label
                     .foregroundStyle(isFocused ? Color.black : .white.opacity(isCurrent ? 1 : 0.75))
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 14)
+                    .padding(.horizontal, Theme.s(22))
+                    .padding(.vertical, Theme.s(14))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         isFocused ? Color.white : (isCurrent ? Color.white.opacity(0.12) : .clear),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: Theme.s(16), style: .continuous)
                     )
                     .scaleEffect(isFocused ? 1.04 : 1)
                     .animation(.easeOut(duration: 0.15), value: isFocused)
