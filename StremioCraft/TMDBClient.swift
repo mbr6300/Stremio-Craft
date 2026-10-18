@@ -144,7 +144,8 @@ enum TMDBClient {
             posterURL: poster,
             backdropURL: backdrop,
             year: year(from: date) ?? item.year,
-            rating: rating ?? item.rating
+            rating: rating ?? item.rating,
+            imdbId: imdb ?? item.imdbId
         )
         return TitleDetail(media: media, imdbId: imdb, runtime: runtime, genres: genres, seasons: seasons)
     }

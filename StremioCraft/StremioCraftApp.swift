@@ -16,19 +16,25 @@ struct StremioCraftApp: App {
     }
 }
 
-/// Tab-Leiste oben wie in tvOS üblich; jeder Tab hat seinen eigenen Navigationsstapel.
+/// Seitenleiste wie in der Apple-TV-App (tvOS 18): am linken Rand nach links öffnet das Menü.
+/// Jeder Bereich hat seinen eigenen Navigationsstapel.
 struct RootView: View {
     var body: some View {
         TabView {
-            NavigationTab { HomeView() }
-                .tabItem { Label("Entdecken", systemImage: "sparkles.tv") }
-            NavigationTab { SearchView() }
-                .tabItem { Label("Suche", systemImage: "magnifyingglass") }
-            NavigationTab { LibraryView() }
-                .tabItem { Label("Bibliothek", systemImage: "rectangle.stack") }
-            NavigationTab { SettingsView() }
-                .tabItem { Label("Einstellungen", systemImage: "gearshape") }
+            Tab("Entdecken", systemImage: "sparkles.tv") {
+                NavigationTab { HomeView() }
+            }
+            Tab("Suche", systemImage: "magnifyingglass", role: .search) {
+                NavigationTab { SearchView() }
+            }
+            Tab("Bibliothek", systemImage: "rectangle.stack") {
+                NavigationTab { LibraryView() }
+            }
+            Tab("Einstellungen", systemImage: "gearshape") {
+                NavigationTab { SettingsView() }
+            }
         }
+        .tabViewStyle(.sidebarAdaptable)
     }
 }
 

@@ -9,6 +9,7 @@ struct DetailView: View {
     @State private var selectedSeason: Int?
     @State private var status: String?
     @State private var loadingEpisodes = false
+    @State private var imdb: IMDbInfo?
 
     private var shown: MediaItem { detail?.media ?? item }
     private var saved: WatchProgress? { model.progress(for: shown) }
@@ -40,14 +41,14 @@ struct DetailView: View {
                 .font(.system(size: 64, weight: .heavy))
                 .lineLimit(2)
                 .minimumScaleFactor(0.6)
-            Text(metaText)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(Theme.accent)
+            MetaLine(item: shown, imdb: imdb, extra: extraMeta)
+                .frame(height: 32)
             Text(shown.overview.isEmpty ? "Keine Beschreibung." : shown.overview)
                 .font(.system(size: 24))
                 .foregroundStyle(.white.opacity(0.8))
                 .lineLimit(5)
                 .frame(maxWidth: 1050, alignment: .leading)
+            credits
             if let status {
                 Text(status)
                     .font(.system(size: 20))
@@ -59,11 +60,36 @@ struct DetailView: View {
         }
     }
 
-    private var metaText: String {
-        var parts = [shown.metaText]
-        if let runtime = detail?.runtime, runtime > 0 { parts.append("\(runtime) Min.") }
+    private var extraMeta: [String] {
+        var parts: [String] = []
+        if let runtime = detail?.runtime ?? imdb?.runtimeMinutes, runtime > 0 { parts.append(Self.duration(runtime)) }
         if let genres = detail?.genres, !genres.isEmpty { parts.append(genres.prefix(3).joined(separator: ", ")) }
-        return parts.joined(separator: "  ·  ")
+        return parts
+    }
+
+    @ViewBuilder
+    private var credits: some View {
+        if let imdb, !(imdb.directors.isEmpty && imdb.cast.isEmpty) {
+            VStack(alignment: .leading, spacing: 6) {
+                if !imdb.directors.isEmpty {
+                    creditLine(isSeries ? "Idee" : "Regie", imdb.directors.prefix(2).joined(separator: ", "))
+                }
+                if !imdb.cast.isEmpty {
+                    creditLine("Mit", imdb.cast.joined(separator: ", "))
+                }
+            }
+            .font(.system(size: 20))
+            .frame(maxWidth: 1050, alignment: .leading)
+        }
+    }
+
+    private func creditLine(_ label: String, _ names: String) -> some View {
+        (Text("\(label)  ").foregroundStyle(.white.opacity(0.45)) + Text(names).foregroundStyle(.white.opacity(0.85)))
+            .lineLimit(1)
+    }
+
+    private static func duration(_ minutes: Int) -> String {
+        minutes >= 60 ? "\(minutes / 60) Std. \(minutes % 60) Min." : "\(minutes) Min."
     }
 
     private var actions: some View {
@@ -231,6 +257,9 @@ struct DetailView: View {
             let loaded = try await TMDBClient.fetchDetail(apiKey: model.tmdbAPIKey, item: item)
             detail = loaded
             status = nil
+            if let id = loaded.media.imdbId {
+                Task { imdb = await IMDbClient.shared.info(imdbId: id) }
+            }
             if loaded.media.normalizedType == "tv" {
                 let season = saved?.season ?? loaded.seasons.first?.seasonNumber ?? 1
                 selectedSeason = season

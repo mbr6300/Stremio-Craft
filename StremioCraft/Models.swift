@@ -9,6 +9,8 @@ struct MediaItem: Identifiable, Hashable, Codable {
     var backdropURL: URL?
     var year: Int?
     var rating: Double?
+    /// Bekannt bei Titeln aus IMDb-basierten Listen; sonst über TMDB nachgeschlagen.
+    var imdbId: String?
 
     var id: String { "\(normalizedType)-\(tmdbId)" }
 

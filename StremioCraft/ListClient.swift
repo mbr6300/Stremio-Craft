@@ -153,6 +153,8 @@ enum ListClient {
         let wanted = Array(unique(ids).prefix(maxItems))
         let items = await IMDbMapping.shared.items(for: wanted, apiKey: apiKey, country: country)
         guard !items.isEmpty else { throw AppFailure.message("Keiner der Titel wurde bei TMDB gefunden.") }
+        // Bewertungen gleich im Batch holen, damit der Fokuswechsel sie sofort hat.
+        Task.detached(priority: .utility) { await IMDbClient.shared.prefetch(wanted) }
         return items
     }
 
@@ -218,11 +220,22 @@ actor IMDbMapping {
                 return results
             }
             for (id, item) in found {
-                if let item { map[id] = item } else { misses.insert(id) }
+                if var item {
+                    item.imdbId = id
+                    map[id] = item
+                } else {
+                    misses.insert(id)
+                }
             }
             scheduleSave()
         }
-        return ids.compactMap { map[$0] }
+        return ids.compactMap { id in
+            map[id].map { item in
+                var copy = item
+                copy.imdbId = id
+                return copy
+            }
+        }
     }
 
     private func loadIfNeeded() {

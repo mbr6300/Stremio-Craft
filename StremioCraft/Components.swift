@@ -50,10 +50,9 @@ struct PosterArtwork: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(.white.opacity(isFocused ? 0.9 : 0), lineWidth: 4)
             }
-            .shadow(color: .black.opacity(isFocused ? 0.6 : 0), radius: 18, y: 12)
+            // Kein animierter Schatten: der kostet pro Frame einen Offscreen-Pass.
             .scaleEffect(isFocused ? 1.1 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isFocused)
-            .zIndex(isFocused ? 1 : 0)
+            .animation(.easeOut(duration: 0.18), value: isFocused)
     }
 }
 
@@ -204,17 +203,30 @@ struct EmptyHint: View {
     }
 }
 
-/// Bildschirmfüllender, abgedunkelter Hintergrund.
+/// Bildschirmfüllender, abgedunkelter Hintergrund. Das alte Bild bleibt stehen, bis das neue
+/// fertig dekodiert ist, dann wird direkt überblendet – kein Zwischenzustand mit Platzhalter.
 struct BackdropLayer: View {
     var url: URL?
+
+    /// TMDB liefert Hintergründe mit 1280 px; für ein abgedunkeltes Bild reicht das.
+    static let maxPixel: CGFloat = 1280
+
+    @State private var image: UIImage?
+    @State private var imageURL: URL?
 
     var body: some View {
         ZStack {
             Theme.background
-            if let url {
-                RemoteImage(url: url, maxPoints: 1920, placeholderSymbol: "")
+            if let image {
+                Color.clear
+                    .overlay {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                    .clipped()
                     .opacity(0.55)
-                    .id(url)
+                    .id(imageURL)
                     .transition(.opacity)
             }
             LinearGradient(
@@ -228,8 +240,87 @@ struct BackdropLayer: View {
                 endPoint: .bottom
             )
         }
-        .animation(.easeInOut(duration: 0.45), value: url)
         .ignoresSafeArea()
+        .task(id: url) {
+            guard let url else {
+                withAnimation(.easeInOut(duration: 0.4)) { image = nil }
+                return
+            }
+            guard url != imageURL else { return }
+            let next: UIImage?
+            if let hit = ImagePipeline.shared.cached(url, maxPixel: Self.maxPixel) {
+                next = hit
+            } else {
+                next = await ImagePipeline.shared.image(url, maxPixel: Self.maxPixel)
+            }
+            guard !Task.isCancelled, let next else { return }
+            withAnimation(.easeInOut(duration: 0.5)) {
+                image = next
+                imageURL = url
+            }
+        }
+    }
+}
+
+/// Gelbes IMDb-Logo mit Bewertung, wie man es von IMDb kennt.
+struct IMDbBadge: View {
+    var rating: Double
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("IMDb")
+                .font(.system(size: 17, weight: .black))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: RoundedRectangle(cornerRadius: 5))
+            Text(String(format: "%.1f", rating))
+                .font(.system(size: 22, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white)
+        }
+    }
+}
+
+/// Metazeile: Typ, Jahr, IMDb-Bewertung (sonst TMDB), Metascore, Freigabe.
+struct MetaLine: View {
+    var item: MediaItem
+    var imdb: IMDbInfo?
+    var extra: [String] = []
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text([item.normalizedType == "tv" ? "Serie" : "Film", item.yearText].filter { !$0.isEmpty }.joined(separator: "  ·  "))
+                .foregroundStyle(Theme.accent)
+            if let rating = imdb?.rating {
+                IMDbBadge(rating: rating)
+                if let votes = imdb?.votesText {
+                    Text(votes).foregroundStyle(.white.opacity(0.55))
+                }
+            } else if let rating = item.rating, rating > 0 {
+                Text(String(format: "★ %.1f", rating)).foregroundStyle(Theme.accent)
+            }
+            if let score = imdb?.metascore {
+                Text("\(score)")
+                    .font(.system(size: 18, weight: .heavy))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(score >= 61 ? Color.green : score >= 40 ? Color.yellow : Color.red, in: RoundedRectangle(cornerRadius: 4))
+                    .foregroundStyle(.black)
+            }
+            if let certificate = imdb?.certificate {
+                Text(certificate)
+                    .font(.system(size: 17, weight: .bold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.white.opacity(0.6), lineWidth: 1.5))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            ForEach(extra, id: \.self) { text in
+                Text(text).foregroundStyle(.white.opacity(0.7))
+            }
+        }
+        .font(.system(size: 22, weight: .semibold))
+        .lineLimit(1)
     }
 }
 

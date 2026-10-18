@@ -29,11 +29,15 @@ private struct HeroBackdrop: View {
 
     var body: some View {
         BackdropLayer(url: shown)
-            // Beim schnellen Durchscrollen nicht jedes Hintergrundbild laden.
             .task(id: (hero.item ?? fallback)?.id) {
-                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard let url = (hero.item ?? fallback)?.backdropURL else { return }
+                // Kurz warten, damit schnelles Durchscrollen nicht jedes Bild lädt;
+                // danach vorladen und erst mit fertigem Bild überblenden.
+                try? await Task.sleep(nanoseconds: 250_000_000)
                 guard !Task.isCancelled else { return }
-                shown = (hero.item ?? fallback)?.backdropURL
+                _ = await ImagePipeline.shared.image(url, maxPixel: BackdropLayer.maxPixel)
+                guard !Task.isCancelled else { return }
+                shown = url
             }
     }
 }
@@ -41,6 +45,8 @@ private struct HeroBackdrop: View {
 private struct HeroInfo: View {
     var fallback: MediaItem?
     @Environment(HeroState.self) private var hero
+    @Environment(AppModel.self) private var model
+    @State private var imdb: IMDbInfo?
 
     var body: some View {
         if let item = hero.item ?? fallback {
@@ -49,9 +55,8 @@ private struct HeroInfo: View {
                     .font(.system(size: 54, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                Text(item.metaText)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
+                MetaLine(item: item, imdb: imdb)
+                    .frame(height: 30)
                 Text(item.overview)
                     .font(.system(size: 22))
                     .foregroundStyle(.white.opacity(0.75))
@@ -62,6 +67,14 @@ private struct HeroInfo: View {
             .id(item.id)
             .transition(.opacity)
             .animation(.easeOut(duration: 0.2), value: item.id)
+            .task(id: item.id) {
+                imdb = nil
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                let info = await IMDbClient.shared.info(for: item, apiKey: model.tmdbAPIKey)
+                guard !Task.isCancelled else { return }
+                imdb = info
+            }
         } else {
             Text("Stremio Craft")
                 .font(.system(size: 54, weight: .heavy))
@@ -86,7 +99,18 @@ private struct ShelvesList: View {
             }
             .padding(.bottom, 80)
         }
-        .scrollClipDisabled()
+        // Abschneiden statt `scrollClipDisabled`: sonst bleiben weggescrollte Regale
+        // (z. B. „Weiterschauen“) über dem Hero-Text sichtbar. Oben weich ausblenden.
+        .mask {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 28)
+                Color.black
+            }
+            // nur oben abschneiden; seitlich und unten über den Rand hinaus sichtbar lassen
+            .padding(.horizontal, -400)
+            .padding(.bottom, -400)
+        }
     }
 }
 
