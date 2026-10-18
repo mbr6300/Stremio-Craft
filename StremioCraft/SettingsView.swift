@@ -157,18 +157,116 @@ struct SettingsView: View {
 }
 
 /// Reihen der Startseite verwalten und eigene Listen per URL hinzufügen.
+///
+/// Verschieben wie auf dem Apple-TV-Homescreen: Reihe anheben, mit ↑/↓ bewegen, mit Klick ablegen.
+/// Während eine Reihe angehoben ist, sind alle anderen gesperrt – so landen die Pfeiltasten
+/// als Verschiebebefehl bei ihr, statt den Fokus weiterzuschieben.
 struct ListsView: View {
     @Environment(AppModel.self) private var model
     @State private var url = ""
     @State private var title = ""
     @State private var status = ""
     @State private var isAdding = false
+    /// Im Reihenfolge-Modus hebt ein Klick eine Reihe an, statt sie ein-/auszublenden.
+    @State private var reorderMode = false
+    @State private var picked: String?
 
     var body: some View {
-        Form {
-            Section {
-                TextField("Adresse der Liste", text: $url)
-                TextField("Name (optional)", text: $title)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 36) {
+                    Text("Listen & Reihen")
+                        .font(.system(size: 52, weight: .heavy))
+                    rowsSection(proxy)
+                    addSection
+                        .disabled(picked != nil)
+                    Button("Standardreihen wiederherstellen") { model.resetCatalogs() }
+                        .buttonStyle(PillButtonStyle())
+                        .disabled(picked != nil)
+                }
+                .padding(.horizontal, Theme.pagePadding)
+                .padding(.vertical, 50)
+            }
+            .scrollClipDisabled()
+        }
+        .background(Theme.background.ignoresSafeArea())
+    }
+
+    // MARK: - Reihen
+
+    private func rowsSection(_ proxy: ScrollViewProxy) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 24) {
+                Text("Reihen auf der Startseite")
+                    .font(.system(size: 32, weight: .bold))
+                Spacer()
+                Button(reorderMode ? "Fertig" : "Reihenfolge ändern") {
+                    reorderMode.toggle()
+                    picked = nil
+                }
+                .buttonStyle(PillButtonStyle(selected: reorderMode))
+                .disabled(picked != nil)
+            }
+            Text(hint)
+                .font(.system(size: 21))
+                .foregroundStyle(picked == nil ? .white.opacity(0.55) : Theme.accent)
+            VStack(spacing: 12) {
+                ForEach(model.catalogs) { entry in
+                    CatalogRowButton(
+                        entry: entry,
+                        source: sourceText(entry.source),
+                        reorderMode: reorderMode,
+                        isPicked: picked == entry.id,
+                        isLocked: picked != nil && picked != entry.id
+                    ) {
+                        if picked == entry.id {
+                            picked = nil
+                        } else if reorderMode {
+                            picked = entry.id
+                        } else {
+                            model.toggleCatalog(entry)
+                        }
+                    } onMove: { offset in
+                        withAnimation(.easeInOut(duration: 0.2)) { model.moveCatalog(entry, by: offset) }
+                        proxy.scrollTo(entry.id, anchor: .center)
+                    } onDrop: {
+                        picked = nil
+                    }
+                    .id(entry.id)
+                    .contextMenu {
+                        Button("Verschieben") {
+                            reorderMode = true
+                            picked = entry.id
+                        }
+                        Button("Ganz nach oben") { withAnimation { model.moveCatalog(entry, toTop: true) } }
+                        Button("Ganz nach unten") { withAnimation { model.moveCatalog(entry, toTop: false) } }
+                        if !entry.isBuiltIn {
+                            Button("Entfernen", role: .destructive) { model.removeCatalog(entry) }
+                        }
+                    }
+                }
+            }
+            .focusSection()
+        }
+    }
+
+    private var hint: String {
+        if picked != nil { return "Mit ↑ und ↓ verschieben, mit Klick oder Zurück ablegen." }
+        if reorderMode { return "Reihe auswählen, die du verschieben möchtest." }
+        return "Klick blendet eine Reihe ein oder aus. Gedrückt halten für Verschieben, ganz nach oben/unten oder Entfernen."
+    }
+
+    // MARK: - Eigene Liste
+
+    private var addSection: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Eigene Liste hinzufügen")
+                .font(.system(size: 32, weight: .bold))
+            TextField("Adresse der Liste", text: $url)
+                .frame(maxWidth: 1200)
+            TextField("Name (optional)", text: $title)
+                .frame(maxWidth: 1200)
+            HStack(spacing: 18) {
                 Button {
                     Task { await add() }
                 } label: {
@@ -177,56 +275,22 @@ struct ListsView: View {
                         Text(isAdding ? "Liste wird geladen…" : "Liste hinzufügen")
                     }
                 }
+                .buttonStyle(PillButtonStyle(prominent: true))
                 .disabled(isAdding)
                 if !status.isEmpty {
                     Text(status).foregroundStyle(.yellow)
                 }
-            } header: {
-                Text("Eigene Liste hinzufügen")
-            } footer: {
-                Text("""
-                Unterstützt: IMDb-Listen (imdb.com/list/ls…) und Charts (imdb.com/chart/top, /toptv, /moviemeter, /tvmeter), \
-                MDBList (mdblist.com/lists/…), TMDB-Listen (themoviedb.org/list/…), Stremio-Addon-Kataloge (…/manifest.json \
-                oder …/catalog/…json) sowie jede Seite mit IMDb-IDs. Maximal \(ListClient.maxItems) Titel pro Liste.
-                """)
             }
-
-            Section {
-                ForEach(model.catalogs) { entry in
-                    Button {
-                        model.toggleCatalog(entry)
-                    } label: {
-                        HStack(spacing: 20) {
-                            Image(systemName: entry.enabled ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(entry.enabled ? Theme.accent : .secondary)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.title)
-                                Text(sourceText(entry.source))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                    .contextMenu {
-                        Button("Nach oben") { model.moveCatalog(entry, by: -1) }
-                        Button("Nach unten") { model.moveCatalog(entry, by: 1) }
-                        if !entry.isBuiltIn {
-                            Button("Entfernen", role: .destructive) { model.removeCatalog(entry) }
-                        }
-                    }
-                }
-            } header: {
-                Text("Reihen")
-            } footer: {
-                Text("Klicken blendet eine Reihe ein oder aus. Gedrückt halten zum Verschieben oder Entfernen.")
-            }
-
-            Section {
-                Button("Standardreihen wiederherstellen", role: .destructive) { model.resetCatalogs() }
-            }
+            Text("""
+            Unterstützt: IMDb-Listen (imdb.com/list/ls…) und Charts (imdb.com/chart/top, /toptv, /moviemeter, /tvmeter), \
+            MDBList (mdblist.com/lists/…), TMDB-Listen (themoviedb.org/list/…), Stremio-Addon-Kataloge (…/manifest.json \
+            oder …/catalog/…json) sowie jede Seite mit IMDb-IDs. Maximal \(ListClient.maxItems) Titel pro Liste.
+            """)
+            .font(.system(size: 19))
+            .foregroundStyle(.white.opacity(0.5))
+            .frame(maxWidth: 1300, alignment: .leading)
         }
-        .navigationTitle("Listen & Reihen")
+        .focusSection()
     }
 
     private func sourceText(_ source: CatalogSource) -> String {
@@ -253,6 +317,100 @@ struct ListsView: View {
             title = ""
         } catch {
             status = error.localizedDescription
+        }
+    }
+}
+
+/// Eine Reihe in der Verwaltung. Angehoben fängt sie ↑/↓ und Zurück ab.
+private struct CatalogRowButton: View {
+    var entry: CatalogEntry
+    var source: String
+    var reorderMode: Bool
+    var isPicked: Bool
+    var isLocked: Bool
+    var action: () -> Void
+    var onMove: (Int) -> Void
+    var onDrop: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            RowLabel(entry: entry, source: source, reorderMode: reorderMode, isPicked: isPicked)
+        }
+        .buttonStyle(RowButtonStyle(isPicked: isPicked))
+        .disabled(isLocked)
+        .opacity(isLocked ? 0.45 : 1)
+        .onMoveCommand { direction in
+            guard isPicked else { return }
+            switch direction {
+            case .up: onMove(-1)
+            case .down: onMove(1)
+            default: break
+            }
+        }
+        .onExitCommand(perform: isPicked ? onDrop : nil)
+    }
+
+    private struct RowLabel: View {
+        var entry: CatalogEntry
+        var source: String
+        var reorderMode: Bool
+        var isPicked: Bool
+
+        var body: some View {
+            HStack(spacing: 22) {
+                Image(systemName: entry.enabled ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 30))
+                    .foregroundStyle(entry.enabled ? Theme.accent : .white.opacity(0.4))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.title)
+                        .font(.system(size: 26, weight: .semibold))
+                    Text(source)
+                        .font(.system(size: 18))
+                        .opacity(0.6)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 20)
+                if isPicked {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 28, weight: .bold))
+                } else if reorderMode {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 28, weight: .semibold))
+                        .opacity(0.6)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 16)
+            .frame(maxWidth: 1400, alignment: .leading)
+        }
+    }
+
+    private struct RowButtonStyle: ButtonStyle {
+        var isPicked: Bool
+
+        func makeBody(configuration: Configuration) -> some View {
+            StyledRow(configuration: configuration, isPicked: isPicked)
+        }
+
+        private struct StyledRow: View {
+            let configuration: ButtonStyleConfiguration
+            let isPicked: Bool
+            @Environment(\.isFocused) private var isFocused
+
+            var body: some View {
+                configuration.label
+                    .foregroundStyle(isFocused && !isPicked ? Color.black : .white)
+                    .background(background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .scaleEffect(isPicked ? 1.04 : (isFocused ? 1.02 : 1))
+                    .shadow(color: .black.opacity(isPicked ? 0.5 : 0), radius: 16, y: 8)
+                    .animation(.easeOut(duration: 0.15), value: isFocused)
+                    .animation(.easeOut(duration: 0.15), value: isPicked)
+            }
+
+            private var background: Color {
+                if isPicked { return Theme.accent }
+                return isFocused ? .white : .white.opacity(0.08)
+            }
         }
     }
 }

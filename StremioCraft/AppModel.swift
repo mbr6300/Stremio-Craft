@@ -260,16 +260,27 @@ final class AppModel {
     }
 
     func toggleCatalog(_ entry: CatalogEntry) {
-        guard let index = catalogs.firstIndex(of: entry) else { return }
+        guard let index = catalogs.firstIndex(where: { $0.id == entry.id }) else { return }
         catalogs[index].enabled.toggle()
         saveCatalogs()
     }
 
     func moveCatalog(_ entry: CatalogEntry, by offset: Int) {
-        guard let index = catalogs.firstIndex(of: entry) else { return }
+        guard let index = catalogs.firstIndex(where: { $0.id == entry.id }) else { return }
         let target = index + offset
         guard catalogs.indices.contains(target) else { return }
         catalogs.swapAt(index, target)
+        saveCatalogs()
+    }
+
+    func moveCatalog(_ entry: CatalogEntry, toTop: Bool) {
+        guard let index = catalogs.firstIndex(where: { $0.id == entry.id }) else { return }
+        let moved = catalogs.remove(at: index)
+        if toTop {
+            catalogs.insert(moved, at: 0)
+        } else {
+            catalogs.append(moved)
+        }
         saveCatalogs()
     }
 
@@ -535,6 +546,10 @@ final class AppModel {
             guard let id = url.pathComponents.last else { return }
             switchProfile(to: id == "all" ? nil : profiles.first { $0.id == id }?.id)
             selectedTab = .home
+            return
+        case "lists":
+            // stremiocraft://lists
+            deepLink = .lists
             return
         case "tab":
             // stremiocraft://tab/profiles
