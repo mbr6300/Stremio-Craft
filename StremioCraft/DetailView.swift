@@ -129,6 +129,14 @@ struct DetailView: View {
                 )
             }
             .buttonStyle(PillButtonStyle(selected: model.isFavorite(shown)))
+            Button {
+                model.toggleLoved(shown)
+            } label: {
+                Image(systemName: model.isLoved(shown) ? "heart.fill" : "heart")
+                    .foregroundStyle(model.isLoved(shown) ? Color(red: 0.93, green: 0.2, blue: 0.33) : .white)
+                    .frame(height: 30)
+            }
+            .buttonStyle(PillButtonStyle())
             if !isSeries {
                 let watched = model.isWatched(shown)
                 Button {

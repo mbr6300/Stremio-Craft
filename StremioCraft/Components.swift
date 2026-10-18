@@ -124,6 +124,7 @@ struct PosterArtwork: View {
     var progress: Double?
     var symbol = "film"
     var watched = false
+    var loved = false
 
     @Environment(\.isFocused) private var isFocused
 
@@ -138,6 +139,9 @@ struct PosterArtwork: View {
             }
             .overlay(alignment: .topTrailing) {
                 if watched { WatchedBadge().padding(10) }
+            }
+            .overlay(alignment: .topLeading) {
+                if loved { LovedBadge().padding(10) }
             }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
@@ -184,18 +188,31 @@ struct WatchedBadge: View {
     }
 }
 
+/// Rotes Herz für Lieblingstitel.
+struct LovedBadge: View {
+    var body: some View {
+        Image(systemName: "heart.fill")
+            .font(.system(size: 18, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 36, height: 36)
+            .background(Color(red: 0.93, green: 0.2, blue: 0.33), in: Circle())
+            .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+    }
+}
+
 struct PosterCard: View {
     var title: String
     var subtitle: String?
     var posterURL: URL?
     var progress: Double?
     var watched = false
+    var loved = false
 
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PosterArtwork(url: posterURL, progress: progress, watched: watched)
+            PosterArtwork(url: posterURL, progress: progress, watched: watched, loved: loved)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 22, weight: .semibold))
@@ -233,12 +250,19 @@ struct MediaLink: View {
                     subtitle: subtitle ?? item.yearText,
                     posterURL: item.posterURL,
                     progress: progress,
-                    watched: model.isWatched(item)
+                    watched: model.isWatched(item),
+                    loved: model.isLoved(item)
                 )
             }
         }
         .buttonStyle(PosterButtonStyle())
         .contextMenu {
+            Button {
+                model.toggleLoved(item)
+            } label: {
+                Label(model.isLoved(item) ? "Nicht mehr lieben" : "Lieben ♥",
+                      systemImage: model.isLoved(item) ? "heart.slash" : "heart")
+            }
             if item.normalizedType == "movie" {
                 let watched = model.isWatched(item)
                 Button {

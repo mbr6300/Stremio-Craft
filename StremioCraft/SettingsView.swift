@@ -296,9 +296,10 @@ struct ListsView: View {
         switch source {
         case .tmdbTrending: return "TMDB · Trend der Woche"
         case .trending(let type): return type == "tv" ? "TMDB · Trend der Woche, Serien" : "TMDB · Trend der Woche, Filme"
-        case .favorites: return "Deine Favoriten"
+        case .favorites: return "Deine Merkliste"
+        case .loved: return "Titel, die du mit ♥ markiert hast"
         case .newOnProviders: return "TMDB · Neue Titel auf Netflix, Disney+, Prime, HBO, Paramount+"
-        case .recommendations: return "TMDB-Empfehlungen zu deinen Favoriten"
+        case .recommendations: return "TMDB-Empfehlungen zu deinen Lieblingstiteln (♥) und deiner Merkliste"
         case .provider(let id):
             let region = TMDBClient.providers.first { $0.id == id }?.region
             return "TMDB · Streaming-Anbieter" + (region.map { " · \($0)-Katalog" } ?? "")

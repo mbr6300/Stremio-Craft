@@ -76,13 +76,14 @@ struct CatalogEntry: Codable, Identifiable, Hashable {
     }
 
     /// Reihen aus den eigenen Favoriten; leer werden sie ausgeblendet.
-    var isPersonal: Bool { source == .favorites || source == .recommendations }
+    var isPersonal: Bool { source == .favorites || source == .loved || source == .recommendations }
 
     /// Erhöhen, wenn neue Standardreihen dazukommen; bestehende Einstellungen werden dann ergänzt.
-    static let defaultsVersion = 4
+    static let defaultsVersion = 5
 
     static let defaults: [CatalogEntry] = [
         CatalogEntry(id: "favorites", title: "Meine Liste", source: .favorites),
+        CatalogEntry(id: "loved", title: "♥ Lieblingstitel", source: .loved),
         CatalogEntry(id: "recommended", title: "Empfohlen für dich", source: .recommendations),
         CatalogEntry(id: "new-on-providers", title: "Neu & im Trend auf deinen Plattformen", source: .newOnProviders),
         CatalogEntry(id: "trending-movies", title: "Im Trend · Filme", source: .trending("movie")),
@@ -121,6 +122,8 @@ enum CatalogSource: Codable, Hashable {
     case provider(String)
     /// Die eigenen Favoriten.
     case favorites
+    /// ♥ Lieblingstitel.
+    case loved
     /// TMDB-Empfehlungen auf Basis der Favoriten.
     case recommendations
     /// Neue, populäre Titel quer über alle Streaming-Anbieter.

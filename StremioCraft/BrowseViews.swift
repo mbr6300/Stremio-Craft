@@ -129,11 +129,22 @@ struct LibraryView: View {
                 }
                 section("Meine Liste") {
                     if model.favorites.isEmpty {
-                        EmptyHint(text: "Auf der Detailseite mit ♥ hinzufügen.", symbol: "heart")
+                        EmptyHint(text: "Auf der Detailseite mit „Meine Liste“ merken.", symbol: "plus")
                     } else {
                         LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 56) {
                             ForEach(model.favorites) { favorite in
                                 MediaLink(item: favorite.media, subtitle: favorite.year.map(String.init))
+                            }
+                        }
+                    }
+                }
+                section("♥ Lieblingstitel") {
+                    if model.loved.isEmpty {
+                        EmptyHint(text: "Titel, die du besonders magst, mit ♥ markieren – sie prägen die Empfehlungen.", symbol: "heart")
+                    } else {
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 56) {
+                            ForEach(model.loved) { item in
+                                MediaLink(item: item.media, subtitle: item.year.map(String.init))
                             }
                         }
                     }
