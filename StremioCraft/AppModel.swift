@@ -15,6 +15,8 @@ final class AppModel {
     private let recentSearchesKey = "recentSearches"
     private let playerKey = "playerChoice"
     private let autoPlayKey = "autoPlayBest"
+    private let profilesKey = "profiles"
+    private let activeProfileKey = "activeProfile"
 
     var country: String
     var tmdbKeyOverride: String
@@ -30,10 +32,17 @@ final class AppModel {
     var playbackNotice: String?
     /// Von außen angeforderte Ansicht (Deep Link), wird vom Entdecken-Bereich geöffnet.
     var deepLink: AppRoute?
-    /// Die letzten 10 Suchbegriffe, neuester zuerst.
+    /// Die letzten 10 Suchbegriffe des aktiven Profils, neuester zuerst.
     var recentSearches: [String] = []
+    var profiles: [Profile] = []
+    /// Gewählter Menüpunkt; z. B. nach dem Profilwechsel zurück zu Entdecken.
+    var selectedTab: AppTab = .home
+    /// `nil` = „Alle“.
+    var activeProfileID: String?
 
-    @ObservationIgnored private var allProgress: [WatchProgress] = []
+    /// Favoriten und Fortschritt je Profil; Schlüssel "" steht für „Alle“.
+    @ObservationIgnored private var favoriteBuckets: [String: [FavoriteItem]] = [:]
+    @ObservationIgnored private var progressBuckets: [String: [WatchProgress]] = [:]
     @ObservationIgnored private var loadedSignature = ""
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var pendingInfuse: PlaybackRequest?
@@ -70,11 +79,12 @@ final class AppModel {
         defaults.set(CatalogEntry.defaultsVersion, forKey: catalogsVersionKey)
         player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .infuse
         autoPlayBest = defaults.object(forKey: autoPlayKey) as? Bool ?? true
-        allProgress = decodeList(WatchProgress.self, key: continueKey)
-        favorites = decodeList(FavoriteItem.self, key: favoriteKey)
-        recentSearches = defaults.stringArray(forKey: recentSearchesKey) ?? []
+        profiles = decodeList(Profile.self, key: profilesKey)
+        activeProfileID = defaults.string(forKey: activeProfileKey).flatMap { id in
+            profiles.contains { $0.id == id } ? id : nil
+        }
         hasRealDebridToken = KeychainStore.loadToken() != nil
-        refreshContinueWatching()
+        loadPersonalData()
         rows = cachedRows()
     }
 
@@ -301,6 +311,92 @@ final class AppModel {
         }
     }
 
+    // MARK: - Profile
+
+    /// Aktives Profil; `nil` heißt „Alle“ (gemeinsame Sicht auf alle Profile).
+    var activeProfile: Profile? {
+        profiles.first { $0.id == activeProfileID }
+    }
+
+    func switchProfile(to id: String?) {
+        guard id != activeProfileID else { return }
+        activeProfileID = id
+        defaults.set(id, forKey: activeProfileKey)
+        loadPersonalData()
+        refreshPersonalRows()
+    }
+
+    @discardableResult
+    func saveProfile(_ profile: Profile) -> Profile {
+        let name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var stored = profile
+        stored.name = name.isEmpty ? "Profil \(profiles.count + 1)" : name
+        if let index = profiles.firstIndex(where: { $0.id == stored.id }) {
+            profiles[index] = stored
+        } else {
+            profiles.append(stored)
+        }
+        save(profiles, key: profilesKey)
+        return stored
+    }
+
+    func deleteProfile(_ profile: Profile) {
+        profiles.removeAll { $0.id == profile.id }
+        save(profiles, key: profilesKey)
+        for base in [favoriteKey, continueKey, recentSearchesKey] {
+            defaults.removeObject(forKey: bucketKey(base, profile.id))
+        }
+        favoriteBuckets[profile.id] = nil
+        progressBuckets[profile.id] = nil
+        if activeProfileID == profile.id {
+            activeProfileID = nil
+            defaults.removeObject(forKey: activeProfileKey)
+        }
+        loadPersonalData()
+        refreshPersonalRows()
+    }
+
+    /// „Alle“ nutzt die bisherigen Schlüssel (so bleiben alte Daten erhalten), Profile hängen ihre ID an.
+    private func bucketKey(_ base: String, _ profileID: String?) -> String {
+        profileID.map { "\(base).\($0)" } ?? base
+    }
+
+    /// Alle Speicherbereiche: `nil` für „Alle“ plus jedes Profil.
+    private var bucketIDs: [String?] { [nil] + profiles.map { Optional($0.id) } }
+
+    private func bucketName(_ id: String?) -> String { id ?? "" }
+
+    private func loadPersonalData() {
+        for id in bucketIDs where favoriteBuckets[bucketName(id)] == nil {
+            favoriteBuckets[bucketName(id)] = decodeList(FavoriteItem.self, key: bucketKey(favoriteKey, id))
+            progressBuckets[bucketName(id)] = decodeList(WatchProgress.self, key: bucketKey(continueKey, id))
+        }
+        refreshFavorites()
+        refreshContinueWatching()
+        recentSearches = defaults.stringArray(forKey: bucketKey(recentSearchesKey, activeProfileID)) ?? []
+    }
+
+    /// Bei „Alle“ die Vereinigung aller Profile, sonst nur das aktive Profil.
+    private func refreshFavorites() {
+        if let id = activeProfileID {
+            favorites = favoriteBuckets[id] ?? []
+            return
+        }
+        var seen = Set<String>()
+        favorites = bucketIDs.flatMap { favoriteBuckets[bucketName($0)] ?? [] }.filter { seen.insert($0.id).inserted }
+    }
+
+    private func refreshContinueWatching() {
+        let source = activeProfileID.map { progressBuckets[$0] ?? [] }
+            ?? bucketIDs.flatMap { progressBuckets[bucketName($0)] ?? [] }
+        var seen = Set<String>()
+        let next = source
+            .filter(\.isActive)
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .filter { seen.insert($0.id).inserted }
+        if next != continueWatching { continueWatching = next }
+    }
+
     // MARK: - Suchverlauf
 
     func addRecentSearch(_ query: String) {
@@ -311,17 +407,17 @@ final class AppModel {
         next = Array(next.prefix(10))
         guard next != recentSearches else { return }
         recentSearches = next
-        defaults.set(next, forKey: recentSearchesKey)
+        defaults.set(next, forKey: bucketKey(recentSearchesKey, activeProfileID))
     }
 
     func removeRecentSearch(_ term: String) {
         recentSearches.removeAll { $0 == term }
-        defaults.set(recentSearches, forKey: recentSearchesKey)
+        defaults.set(recentSearches, forKey: bucketKey(recentSearchesKey, activeProfileID))
     }
 
     func clearRecentSearches() {
         recentSearches = []
-        defaults.removeObject(forKey: recentSearchesKey)
+        defaults.removeObject(forKey: bucketKey(recentSearchesKey, activeProfileID))
     }
 
     // MARK: - Favoriten & Fortschritt
@@ -332,22 +428,31 @@ final class AppModel {
 
     func toggleFavorite(_ item: MediaItem) {
         let type = item.normalizedType
-        if let index = favorites.firstIndex(where: { $0.tmdbId == item.tmdbId && $0.mediaType == type }) {
-            favorites.remove(at: index)
-        } else {
-            favorites.insert(FavoriteItem(
-                tmdbId: item.tmdbId,
-                mediaType: type,
-                title: item.title,
-                overview: item.overview,
-                posterURL: item.posterURL,
-                year: item.year,
-                backdropURL: item.backdropURL,
-                rating: item.rating,
-                imdbId: item.imdbId
-            ), at: 0)
+        let matches: (FavoriteItem) -> Bool = { $0.tmdbId == item.tmdbId && $0.mediaType == type }
+        // Bei „Alle“ entfernt das Abwählen den Titel aus allen Profilen; Hinzufügen landet im gemeinsamen Bereich.
+        let wasFavorite = isFavorite(item)
+        let targets: [String?] = wasFavorite ? (activeProfileID.map { [$0] } ?? bucketIDs) : [activeProfileID]
+        for id in targets {
+            var list = favoriteBuckets[bucketName(id)] ?? []
+            if wasFavorite {
+                list.removeAll(where: matches)
+            } else {
+                list.insert(FavoriteItem(
+                    tmdbId: item.tmdbId,
+                    mediaType: type,
+                    title: item.title,
+                    overview: item.overview,
+                    posterURL: item.posterURL,
+                    year: item.year,
+                    backdropURL: item.backdropURL,
+                    rating: item.rating,
+                    imdbId: item.imdbId
+                ), at: 0)
+            }
+            favoriteBuckets[bucketName(id)] = list
+            save(list, key: bucketKey(favoriteKey, id))
         }
-        save(favorites, key: favoriteKey)
+        refreshFavorites()
         refreshPersonalRows()
     }
 
@@ -377,23 +482,26 @@ final class AppModel {
             episodeTitle: episodeTitle,
             updatedAt: Date()
         )
-        allProgress.removeAll { $0.id == entry.id }
+        let bucket = bucketName(activeProfileID)
+        var list = progressBuckets[bucket] ?? []
+        list.removeAll { $0.id == entry.id }
         if entry.isActive {
-            allProgress.append(entry)
+            list.append(entry)
         }
-        save(allProgress, key: continueKey)
+        progressBuckets[bucket] = list
+        save(list, key: bucketKey(continueKey, activeProfileID))
         refreshContinueWatching()
     }
 
     func removeProgress(_ entry: WatchProgress) {
-        allProgress.removeAll { $0.id == entry.id }
-        save(allProgress, key: continueKey)
+        // Bei „Alle“ aus allen Profilen entfernen, sonst nur aus dem aktiven.
+        for id in activeProfileID.map({ [Optional($0)] }) ?? bucketIDs {
+            var list = progressBuckets[bucketName(id)] ?? []
+            list.removeAll { $0.id == entry.id }
+            progressBuckets[bucketName(id)] = list
+            save(list, key: bucketKey(continueKey, id))
+        }
         refreshContinueWatching()
-    }
-
-    private func refreshContinueWatching() {
-        let next = allProgress.filter(\.isActive).sorted { $0.updatedAt > $1.updatedAt }
-        if next != continueWatching { continueWatching = next }
     }
 
     // MARK: - Infuse-Rückmeldung
@@ -420,6 +528,16 @@ final class AppModel {
             guard parts.count == 2, let id = Int(parts[1]),
                   let genre = (parts[0] == "tv" ? Genre.series : Genre.movie).first(where: { $0.id == id }) else { return }
             deepLink = .discover(genre.query(type: parts[0] == "tv" ? "tv" : "movie"))
+            return
+        case "profile":
+            // stremiocraft://profile/<id> bzw. stremiocraft://profile/all
+            guard let id = url.pathComponents.last else { return }
+            switchProfile(to: id == "all" ? nil : profiles.first { $0.id == id }?.id)
+            selectedTab = .home
+            return
+        case "tab":
+            // stremiocraft://tab/profiles
+            if let tab = url.pathComponents.last.flatMap(AppTab.init(rawValue:)) { selectedTab = tab }
             return
         case "row":
             // stremiocraft://row/new-on-providers

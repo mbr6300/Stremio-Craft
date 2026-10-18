@@ -24,24 +24,35 @@ struct StremioCraftApp: App {
     }
 }
 
+enum AppTab: String, Hashable {
+    case profiles, home, categories, search, library, settings
+}
+
 /// Seitenleiste wie in der Apple-TV-App (tvOS 18): am linken Rand nach links öffnet das Menü.
 /// Jeder Bereich hat seinen eigenen Navigationsstapel.
 struct RootView: View {
+    @Environment(AppModel.self) private var model
+
     var body: some View {
-        TabView {
-            Tab("Entdecken", systemImage: "sparkles.tv") {
+        @Bindable var model = model
+        TabView(selection: $model.selectedTab) {
+            // Oben wie in der Apple-TV-App: aktives Profil, führt zu „Wer schaut?“.
+            Tab(model.activeProfile?.name ?? "Alle", systemImage: "person.crop.circle", value: AppTab.profiles) {
+                NavigationTab { ProfilesView() }
+            }
+            Tab("Entdecken", systemImage: "sparkles.tv", value: AppTab.home) {
                 NavigationTab(handlesDeepLinks: true) { HomeView() }
             }
-            Tab("Kategorien", systemImage: "square.grid.2x2") {
+            Tab("Kategorien", systemImage: "square.grid.2x2", value: AppTab.categories) {
                 NavigationTab { CategoriesView() }
             }
-            Tab("Suche", systemImage: "magnifyingglass", role: .search) {
+            Tab("Suche", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 NavigationTab { SearchView() }
             }
-            Tab("Bibliothek", systemImage: "rectangle.stack") {
+            Tab("Bibliothek", systemImage: "rectangle.stack", value: AppTab.library) {
                 NavigationTab { LibraryView() }
             }
-            Tab("Einstellungen", systemImage: "gearshape") {
+            Tab("Einstellungen", systemImage: "gearshape", value: AppTab.settings) {
                 NavigationTab { SettingsView() }
             }
         }

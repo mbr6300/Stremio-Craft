@@ -5,16 +5,24 @@ struct HomeView: View {
     @Environment(AppModel.self) private var model
     @State private var hero = HeroState()
 
+    /// Solange nichts fokussiert ist: erster Titel der ersten nicht-leeren Reihe.
+    private var fallback: MediaItem? {
+        model.rows.first { !$0.items.isEmpty }?.items.first
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
-            HeroBackdrop(fallback: model.rows.first?.items.first)
+            HeroBackdrop(fallback: fallback)
             VStack(alignment: .leading, spacing: 0) {
                 // Kompakter Kopf: Infos links, Filter rechts in derselben Zone,
                 // damit unten möglichst viel Platz für die Regale bleibt.
                 HStack(alignment: .bottom, spacing: 40) {
-                    HeroInfo(fallback: model.rows.first?.items.first)
+                    HeroInfo(fallback: fallback)
                     Spacer(minLength: 0)
-                    FilterPicker()
+                    VStack(alignment: .trailing, spacing: 18) {
+                        ActiveProfileBadge()
+                        FilterPicker()
+                    }
                 }
                 .frame(height: 165, alignment: .bottom)
                 .padding(.horizontal, Theme.pagePadding)
