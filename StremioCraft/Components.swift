@@ -7,7 +7,7 @@ enum Theme {
     static let background = Color(red: 0.035, green: 0.05, blue: 0.11)
     static let surface = Color.white.opacity(0.07)
     static let posterSize = CGSize(width: 200, height: 300)
-    static let stillSize = CGSize(width: 384, height: 216)
+    static let stillSize = CGSize(width: 352, height: 198)
     static let pagePadding: CGFloat = 80
     /// Abstand zwischen Kopfbereich (Titel/Beschreibung) und den Regalen darunter.
     static let headerGap: CGFloat = 22

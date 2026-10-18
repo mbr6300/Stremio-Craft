@@ -21,10 +21,10 @@ struct DetailView: View {
         ZStack {
             BackdropLayer(url: shown.backdropURL)
             ScrollView {
-                VStack(alignment: .leading, spacing: 40) {
+                VStack(alignment: .leading, spacing: 22) {
                     header
                         .padding(.horizontal, Theme.pagePadding)
-                        .padding(.top, 200)
+                        .padding(.top, 90)
                     if isSeries {
                         seasonBar
                         episodeShelf
@@ -42,17 +42,17 @@ struct DetailView: View {
     // MARK: - Kopf
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(shown.title)
-                .font(.system(size: 64, weight: .heavy))
-                .lineLimit(2)
+                .font(.system(size: 54, weight: .heavy))
+                .lineLimit(1)
                 .minimumScaleFactor(0.6)
             MetaLine(item: shown, imdb: imdb, extra: extraMeta)
                 .frame(height: 32)
             Text(shown.overview.isEmpty ? "Keine Beschreibung." : shown.overview)
-                .font(.system(size: 24))
+                .font(.system(size: 22))
                 .foregroundStyle(.white.opacity(0.8))
-                .lineLimit(5)
+                .lineLimit(3)
                 .frame(maxWidth: 1050, alignment: .leading)
             credits
             if let status {
@@ -61,7 +61,7 @@ struct DetailView: View {
                     .foregroundStyle(.yellow)
             }
             actions
-                .padding(.top, 12)
+                .padding(.top, 6)
                 .focusSection()
         }
     }
@@ -171,7 +171,7 @@ struct DetailView: View {
                 }
             }
             .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 12)
+            .padding(.vertical, 8)
         }
         .scrollClipDisabled()
         .focusSection()
@@ -197,7 +197,7 @@ struct DetailView: View {
                             }
                         }
                         .padding(.horizontal, Theme.pagePadding)
-                        .padding(.vertical, 24)
+                        .padding(.vertical, 18)
                     }
                     .scrollClipDisabled()
                     .onAppear {
@@ -296,7 +296,7 @@ private struct EpisodeCard: View {
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             PosterArtwork(url: episode.stillURL, size: Theme.stillSize, progress: progress, symbol: "tv")
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(episode.episodeNumber). \(episode.name)")
