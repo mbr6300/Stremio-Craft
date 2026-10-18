@@ -9,9 +9,15 @@ struct HomeView: View {
         ZStack(alignment: .topLeading) {
             HeroBackdrop(fallback: model.rows.first?.items.first)
             VStack(alignment: .leading, spacing: 0) {
-                HeroInfo(fallback: model.rows.first?.items.first)
-                    .frame(height: 330, alignment: .bottomLeading)
-                    .padding(.horizontal, Theme.pagePadding)
+                // Kompakter Kopf: Infos links, Filter rechts in derselben Zone,
+                // damit unten möglichst viel Platz für die Regale bleibt.
+                HStack(alignment: .bottom, spacing: 40) {
+                    HeroInfo(fallback: model.rows.first?.items.first)
+                    Spacer(minLength: 0)
+                    FilterPicker()
+                }
+                .frame(height: 200, alignment: .bottom)
+                .padding(.horizontal, Theme.pagePadding)
                 ShelvesList()
             }
         }
@@ -50,20 +56,19 @@ private struct HeroInfo: View {
 
     var body: some View {
         if let item = hero.item ?? fallback {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(item.title)
-                    .font(.system(size: 54, weight: .heavy))
+                    .font(.system(size: 46, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 MetaLine(item: item, imdb: imdb)
                     .frame(height: 30)
                 Text(item.overview)
-                    .font(.system(size: 22))
+                    .font(.system(size: 21))
                     .foregroundStyle(.white.opacity(0.75))
-                    .lineLimit(3)
+                    .lineLimit(2)
                     .frame(maxWidth: 1000, alignment: .leading)
             }
-            .padding(.bottom, 10)
             .id(item.id)
             .transition(.opacity)
             .animation(.easeOut(duration: 0.2), value: item.id)
@@ -77,8 +82,21 @@ private struct HeroInfo: View {
             }
         } else {
             Text("Stremio Craft")
-                .font(.system(size: 54, weight: .heavy))
+                .font(.system(size: 46, weight: .heavy))
         }
+    }
+}
+
+private struct FilterPicker: View {
+    @AppStorage("homeFilter") private var filter: MediaFilter = .all
+
+    var body: some View {
+        Picker("Anzeigen", selection: $filter) {
+            ForEach(MediaFilter.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .frame(width: 460)
+        .focusSection()
     }
 }
 
@@ -89,14 +107,6 @@ private struct ShelvesList: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(alignment: .leading, spacing: 8) {
-                Picker("Anzeigen", selection: $filter) {
-                    ForEach(MediaFilter.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 560)
-                .padding(.horizontal, Theme.pagePadding)
-                .padding(.top, 24)
-                .focusSection()
                 ContinueShelf(filter: filter)
                 ForEach(model.rows) { row in
                     CatalogShelf(row: row, filter: filter)
@@ -106,6 +116,7 @@ private struct ShelvesList: View {
                         .padding(.horizontal, Theme.pagePadding)
                 }
             }
+            .padding(.top, 24)
             .padding(.bottom, 80)
         }
         // Abschneiden statt `scrollClipDisabled`: sonst bleiben weggescrollte Regale
