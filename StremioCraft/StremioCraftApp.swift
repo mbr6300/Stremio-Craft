@@ -67,8 +67,12 @@ private struct NavigationTab<Root: View>: View {
                         PlaybackView(request: request)
                     case .lists:
                         ListsView()
-                    case .genre(let selection):
-                        GenreView(selection: selection)
+                    case .discover(let query):
+                        DiscoverGridView(query: query)
+                    case .provider(let id):
+                        ProviderView(providerId: id)
+                    case .row(let id):
+                        RowGridView(rowId: id)
                     }
                 }
         }

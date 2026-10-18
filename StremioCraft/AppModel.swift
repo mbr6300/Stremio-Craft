@@ -166,7 +166,7 @@ final class AppModel {
         case .favorites:
             return favorites
         case .newOnProviders:
-            return try await TMDBClient.fetchNewOnProviders(apiKey: apiKey, country: country)
+            return try await DiscoverCache.shared.firstPage(.newOnAllProviders, apiKey: apiKey, country: country)
         case .recommendations:
             return await recommendations(for: favorites, apiKey: apiKey, country: country)
         case .provider(let id):
@@ -419,7 +419,17 @@ final class AppModel {
             let parts = url.pathComponents.filter { $0 != "/" }
             guard parts.count == 2, let id = Int(parts[1]),
                   let genre = (parts[0] == "tv" ? Genre.series : Genre.movie).first(where: { $0.id == id }) else { return }
-            deepLink = .genre(GenreSelection(genre: genre, type: parts[0] == "tv" ? "tv" : "movie"))
+            deepLink = .discover(genre.query(type: parts[0] == "tv" ? "tv" : "movie"))
+            return
+        case "row":
+            // stremiocraft://row/new-on-providers
+            guard let id = url.pathComponents.last, id != "/" else { return }
+            deepLink = .row(id)
+            return
+        case "provider":
+            // stremiocraft://provider/netflix
+            guard let id = url.pathComponents.last, TMDBClient.providers.contains(where: { $0.id == id }) else { return }
+            deepLink = .provider(id)
             return
         case "infuse-success":
             guard let request = pendingInfuse, let position = value("position").flatMap(Double.init) else { return }

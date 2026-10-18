@@ -17,6 +17,46 @@ enum Theme {
 @Observable
 final class HeroState {
     var item: MediaItem?
+    /// Reihe, in der der Fokus gerade liegt; die Liste richtet sie oben aus.
+    var shelfID: String?
+}
+
+private struct ShelfIDKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    /// Kennung der umgebenden Reihe, damit Poster ihre Reihe melden können.
+    var shelfID: String? {
+        get { self[ShelfIDKey.self] }
+        set { self[ShelfIDKey.self] = newValue }
+    }
+}
+
+/// Vertikale Regal-Liste unter einem festen Kopf. Die fokussierte Reihe wird immer
+/// vollständig oben ausgerichtet, statt halb abgeschnitten zu sein.
+struct ShelvesScroll<Content: View>: View {
+    @ViewBuilder var content: Content
+    @Environment(HeroState.self) private var hero
+    @State private var position: String?
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                content
+            }
+            .scrollTargetLayout()
+            .padding(.top, 20)
+            // Platz, damit auch die letzte Reihe nach oben rutschen kann.
+            .padding(.bottom, 520)
+        }
+        .scrollPosition(id: $position, anchor: .top)
+        .topFadeMask()
+        .onChange(of: hero.shelfID) { _, id in
+            guard let id, id != position else { return }
+            withAnimation(.easeInOut(duration: 0.3)) { position = id }
+        }
+    }
 }
 
 /// Fokus-Stil im Stil der Apple-TV-App: Poster hebt sich, Rahmen und Schatten nur im Fokus.
@@ -143,6 +183,10 @@ struct MediaLink: View {
     var item: MediaItem
     var subtitle: String?
     var progress: Double?
+    /// Ziel für „Ganze Liste anzeigen“ im Kontextmenü (gedrückt halten).
+    var listRoute: AppRoute?
+
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         NavigationLink(value: AppRoute.detail(item)) {
@@ -156,6 +200,70 @@ struct MediaLink: View {
             }
         }
         .buttonStyle(PosterButtonStyle())
+        .contextMenu {
+            if let listRoute {
+                // NavigationLink im Kontextmenü ist auf tvOS unzuverlässig; daher über den Deep-Link-Weg.
+                Button {
+                    model.deepLink = listRoute
+                } label: {
+                    Label("Ganze Liste anzeigen", systemImage: "square.grid.3x3")
+                }
+            }
+            Button {
+                model.toggleFavorite(item)
+            } label: {
+                Label(
+                    model.isFavorite(item) ? "Aus Meine Liste entfernen" : "Zu Meine Liste hinzufügen",
+                    systemImage: model.isFavorite(item) ? "minus" : "plus"
+                )
+            }
+        }
+    }
+}
+
+/// Letzte Kachel eines Regals: führt zur vollständigen Liste.
+struct SeeAllCard: View {
+    var route: AppRoute
+
+    var body: some View {
+        NavigationLink(value: route) {
+            SeeAllLabel()
+        }
+        .buttonStyle(PosterButtonStyle())
+    }
+
+    private struct SeeAllLabel: View {
+        @Environment(\.isFocused) private var isFocused
+
+        var body: some View {
+            VStack(spacing: 18) {
+                Image(systemName: "square.grid.3x3.fill")
+                    .font(.system(size: 46))
+                Text("Alle anzeigen")
+                    .font(.system(size: 24, weight: .bold))
+            }
+            .foregroundStyle(isFocused ? Color.black : .white)
+            .frame(width: Theme.posterSize.width, height: Theme.posterSize.height)
+            .background(isFocused ? Color.white : Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .scaleEffect(isFocused ? 1.1 : 1)
+            .animation(.easeOut(duration: 0.18), value: isFocused)
+        }
+    }
+}
+
+extension View {
+    /// Schneidet nur oben ab (mit weichem Übergang), seitlich und unten darf Inhalt über den Rand.
+    /// Nötig für vertikale Regal-Listen unter einem festen Kopfbereich.
+    func topFadeMask() -> some View {
+        mask {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 28)
+                Color.black
+            }
+            .padding(.horizontal, -400)
+            .padding(.bottom, -400)
+        }
     }
 }
 
@@ -164,12 +272,15 @@ struct FocusReporter<Content: View>: View {
     @ViewBuilder var content: Content
 
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.shelfID) private var shelfID
     @Environment(HeroState.self) private var hero: HeroState?
 
     var body: some View {
         content
             .onChange(of: isFocused) { _, focused in
-                if focused, hero?.item?.id != item.id { hero?.item = item }
+                guard focused, let hero else { return }
+                if hero.item?.id != item.id { hero.item = item }
+                if let shelfID, hero.shelfID != shelfID { hero.shelfID = shelfID }
             }
     }
 }
@@ -177,7 +288,11 @@ struct FocusReporter<Content: View>: View {
 /// Horizontales Regal mit Titel. Lazy, damit nur sichtbare Poster existieren.
 struct Shelf<Content: View>: View {
     var title: String
+    /// Kennung für das Ausrichten in `ShelvesScroll`; muss zur Identität in der Liste passen.
+    var shelfID: String?
     var isLoading = false
+    /// Hängt am Ende eine „Alle anzeigen“-Kachel an.
+    var seeAll: AppRoute?
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -193,6 +308,9 @@ struct Shelf<Content: View>: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 36) {
                     content
+                    if let seeAll {
+                        SeeAllCard(route: seeAll)
+                    }
                 }
                 .padding(.horizontal, Theme.pagePadding)
                 .padding(.top, 26)
@@ -201,6 +319,7 @@ struct Shelf<Content: View>: View {
             .scrollClipDisabled()
         }
         .focusSection()
+        .environment(\.shelfID, shelfID)
     }
 }
 

@@ -259,7 +259,12 @@ enum AppRoute: Hashable {
     case detail(MediaItem)
     case play(PlaybackRequest)
     case lists
-    case genre(GenreSelection)
+    /// Vollständige TMDB-Liste (Genre, Plattform-Reihe …) als Raster.
+    case discover(DiscoverQuery)
+    /// Seite einer Streaming-Plattform (Netflix, Disney+ …).
+    case provider(String)
+    /// Vollständige Startseiten-Reihe als Raster.
+    case row(String)
 }
 
 struct CatalogRow: Identifiable, Equatable {

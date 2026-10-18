@@ -57,10 +57,18 @@ enum GenreSort: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-struct GenreSelection: Hashable {
-    var genre: Genre
-    /// "movie" oder "tv"
-    var type: String
+extension Genre {
+    /// Vollständige Liste dieses Genres für Filme ("movie") oder Serien ("tv").
+    func query(type: String) -> DiscoverQuery {
+        let isTV = type == "tv"
+        return DiscoverQuery(
+            title: name,
+            movieGenre: isTV ? nil : id,
+            tvGenre: isTV ? id : nil,
+            includeMovies: !isTV,
+            includeSeries: isTV
+        )
+    }
 }
 
 /// Übersicht aller Genres als Kacheln, umschaltbar zwischen Filmen und Serien.
@@ -83,7 +91,7 @@ struct CategoriesView: View {
                 .focusSection()
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 40)], spacing: 40) {
                     ForEach(genres) { genre in
-                        NavigationLink(value: AppRoute.genre(GenreSelection(genre: genre, type: type))) {
+                        NavigationLink(value: AppRoute.discover(genre.query(type: type))) {
                             GenreTile(genre: genre)
                         }
                         .buttonStyle(PosterButtonStyle())
@@ -131,93 +139,5 @@ private struct GenreTile: View {
         }
         .scaleEffect(isFocused ? 1.08 : 1)
         .animation(.easeOut(duration: 0.18), value: isFocused)
-    }
-}
-
-/// Titel eines Genres als Raster mit Sortierung; lädt beim Scrollen weitere Seiten nach.
-struct GenreView: View {
-    @Environment(AppModel.self) private var model
-    var selection: GenreSelection
-
-    @State private var sort: GenreSort = .popular
-    @State private var items: [MediaItem] = []
-    @State private var page = 0
-    @State private var totalPages = 1
-    @State private var isLoading = false
-    @State private var message: String?
-
-    private let columns = [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: 44)]
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
-                Text("\(selection.genre.name) · \(selection.type == "tv" ? "Serien" : "Filme")")
-                    .font(.system(size: 52, weight: .heavy))
-                HStack(spacing: 20) {
-                    ForEach(GenreSort.allCases) { option in
-                        Button(option.label) { sort = option }
-                            .buttonStyle(PillButtonStyle(selected: sort == option))
-                    }
-                }
-                .focusSection()
-                if let message, items.isEmpty {
-                    EmptyHint(text: message, symbol: "exclamationmark.triangle")
-                }
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
-                    ForEach(items) { item in
-                        MediaLink(item: item)
-                            .onAppear {
-                                if item.id == items.last?.id { Task { await loadMore() } }
-                            }
-                    }
-                    if isLoading && items.isEmpty {
-                        PlaceholderShelfItems(count: 14)
-                    }
-                }
-                .focusSection()
-                if isLoading && !items.isEmpty {
-                    ProgressView().frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.horizontal, Theme.pagePadding)
-            .padding(.vertical, 50)
-        }
-        .scrollClipDisabled()
-        .background(Theme.background.ignoresSafeArea())
-        .task(id: sort) {
-            items = []
-            page = 0
-            totalPages = 1
-            message = nil
-            await loadMore()
-        }
-    }
-
-    private func loadMore() async {
-        guard !isLoading, page < totalPages, page < 25, model.hasTMDBKey else {
-            if !model.hasTMDBKey { message = "TMDB-API-Schlüssel fehlt." }
-            return
-        }
-        isLoading = true
-        defer { isLoading = false }
-        let currentSort = sort
-        do {
-            let result = try await TMDBClient.fetchGenre(
-                apiKey: model.tmdbAPIKey,
-                country: model.country,
-                type: selection.type,
-                genreId: selection.genre.id,
-                sort: currentSort,
-                page: page + 1
-            )
-            guard currentSort == sort else { return }
-            let known = Set(items.map(\.id))
-            items += result.items.filter { !known.contains($0.id) }
-            page += 1
-            totalPages = result.totalPages
-            if items.isEmpty { message = "Keine Titel gefunden." }
-        } catch {
-            message = error.localizedDescription
-        }
     }
 }

@@ -58,45 +58,13 @@ enum TMDBClient {
         return items
     }
 
-    /// Neu & im Trend auf allen bekannten Plattformen: Filme der letzten Monate bzw. Serien mit
-    /// neuen Folgen, per Flatrate im Land verfügbar, nach Popularität sortiert, Filme und Serien gemischt.
-    static func fetchNewOnProviders(apiKey: String, country: String) async throws -> [MediaItem] {
-        let ids = providers.flatMap { [$0.tmdbProviderId] + ($0.fallbackProviderId.map { [$0] } ?? []) }
-        let providerList = ids.map(String.init).joined(separator: "|")
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        let today = Date()
-        let day: (Int) -> String = { formatter.string(from: today.addingTimeInterval(TimeInterval(-$0 * 86_400))) }
-        let common = [
-            "api_key": apiKey,
-            "language": language(for: country),
-            "watch_region": country,
-            "with_watch_providers": providerList,
-            "with_watch_monetization_types": "flatrate",
-            "sort_by": "popularity.desc"
-        ]
-        let movieURL = try makeURL("/discover/movie", common.merging([
-            "primary_release_date.gte": day(150),
-            "primary_release_date.lte": day(0),
-            "vote_count.gte": "10"
-        ]) { $1 })
-        let tvURL = try makeURL("/discover/tv", common.merging([
-            "air_date.gte": day(30),
-            "air_date.lte": day(0)
-        ]) { $1 })
-        async let movies = get(movieURL) { (page: TMDBPage) in page.results.compactMap(parseMovie) }
-        async let series = get(tvURL) { (page: TMDBPage) in page.results.compactMap(parseTV) }
-        let (movieItems, seriesItems) = try await (movies, series)
-        return interleave(movieItems, seriesItems)
-    }
-
-    /// Titel eines Genres, seitenweise. `type`: "movie" oder "tv".
-    static func fetchGenre(
+    /// Eine Seite TMDB-Discover für Filme (`type` "movie") oder Serien ("tv"):
+    /// optional nach Genre, Streaming-Anbieter und „nur Neues“ gefiltert.
+    static func fetchDiscover(
         apiKey: String,
         country: String,
+        query discover: DiscoverQuery,
         type: String,
-        genreId: Int,
         sort: GenreSort,
         page: Int
     ) async throws -> (items: [MediaItem], totalPages: Int) {
@@ -104,24 +72,41 @@ enum TMDBClient {
         var query = [
             "api_key": apiKey,
             "language": language(for: country),
-            "with_genres": String(genreId),
             "page": String(page),
             "include_adult": "false"
         ]
+        if let genre = isTV ? discover.tvGenre : discover.movieGenre {
+            query["with_genres"] = String(genre)
+        }
+        if !discover.providers.isEmpty {
+            query["watch_region"] = country
+            query["with_watch_providers"] = discover.providers.map(String.init).joined(separator: "|")
+            query["with_watch_monetization_types"] = "flatrate"
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let day: (Int) -> String = { formatter.string(from: Date().addingTimeInterval(TimeInterval(-$0 * 86_400))) }
+        if discover.recent {
+            // Filme der letzten Monate, Serien mit neuen Folgen im letzten Monat.
+            if isTV {
+                query["air_date.gte"] = day(30)
+                query["air_date.lte"] = day(0)
+            } else {
+                query["primary_release_date.gte"] = day(150)
+                query["primary_release_date.lte"] = day(0)
+            }
+        }
         switch sort {
         case .popular:
             query["sort_by"] = "popularity.desc"
-            query["vote_count.gte"] = "20"
+            query["vote_count.gte"] = discover.recent ? "5" : "20"
         case .topRated:
             query["sort_by"] = "vote_average.desc"
-            query["vote_count.gte"] = isTV ? "200" : "500"
+            query["vote_count.gte"] = discover.recent ? "30" : (isTV ? "200" : "500")
         case .newest:
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            let today = formatter.string(from: Date())
             query["sort_by"] = isTV ? "first_air_date.desc" : "primary_release_date.desc"
-            query[isTV ? "first_air_date.lte" : "primary_release_date.lte"] = today
+            query[isTV ? "first_air_date.lte" : "primary_release_date.lte"] = day(0)
             query["vote_count.gte"] = "15"
         }
         let url = try makeURL(isTV ? "/discover/tv" : "/discover/movie", query)

@@ -16,7 +16,7 @@ struct HomeView: View {
                     Spacer(minLength: 0)
                     FilterPicker()
                 }
-                .frame(height: 200, alignment: .bottom)
+                .frame(height: 165, alignment: .bottom)
                 .padding(.horizontal, Theme.pagePadding)
                 ShelvesList()
             }
@@ -28,7 +28,7 @@ struct HomeView: View {
     }
 }
 
-private struct HeroBackdrop: View {
+struct HeroBackdrop: View {
     var fallback: MediaItem?
     @Environment(HeroState.self) private var hero
     @State private var shown: URL?
@@ -48,17 +48,18 @@ private struct HeroBackdrop: View {
     }
 }
 
-private struct HeroInfo: View {
+struct HeroInfo: View {
     var fallback: MediaItem?
+    var placeholder = "Stremio Craft"
     @Environment(HeroState.self) private var hero
     @Environment(AppModel.self) private var model
     @State private var imdb: IMDbInfo?
 
     var body: some View {
         if let item = hero.item ?? fallback {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
-                    .font(.system(size: 46, weight: .heavy))
+                    .font(.system(size: 44, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 MetaLine(item: item, imdb: imdb)
@@ -81,8 +82,8 @@ private struct HeroInfo: View {
                 imdb = info
             }
         } else {
-            Text("Stremio Craft")
-                .font(.system(size: 46, weight: .heavy))
+            Text(placeholder)
+                .font(.system(size: 44, weight: .heavy))
         }
     }
 }
@@ -105,48 +106,43 @@ private struct ShelvesList: View {
     @AppStorage("homeFilter") private var filter: MediaFilter = .all
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                ContinueShelf(filter: filter)
-                ForEach(model.rows) { row in
-                    CatalogShelf(row: row, filter: filter)
-                }
-                if model.rows.isEmpty {
-                    EmptyHint(text: "Keine Reihen aktiv. In den Einstellungen unter „Listen & Reihen“ einschalten.")
-                        .padding(.horizontal, Theme.pagePadding)
-                }
+        ShelvesScroll {
+            ContinueShelf(filter: filter)
+                .id("continue")
+            ForEach(model.rows) { row in
+                CatalogShelf(row: row, filter: filter)
             }
-            .padding(.top, 24)
-            .padding(.bottom, 80)
-        }
-        // Abschneiden statt `scrollClipDisabled`: sonst bleiben weggescrollte Regale
-        // (z. B. „Weiterschauen“) über dem Hero-Text sichtbar. Oben weich ausblenden.
-        .mask {
-            VStack(spacing: 0) {
-                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 28)
-                Color.black
+            if model.rows.isEmpty {
+                EmptyHint(text: "Keine Reihen aktiv. In den Einstellungen unter „Listen & Reihen“ einschalten.")
+                    .padding(.horizontal, Theme.pagePadding)
             }
-            // nur oben abschneiden; seitlich und unten über den Rand hinaus sichtbar lassen
-            .padding(.horizontal, -400)
-            .padding(.bottom, -400)
         }
     }
 }
 
 private struct CatalogShelf: View {
+    @Environment(AppModel.self) private var model
     var row: CatalogRow
     var filter: MediaFilter
+
+    /// Plattform-Reihen öffnen die Plattform-Seite, alle anderen die vollständige Liste.
+    private var allRoute: AppRoute {
+        switch model.catalogs.first(where: { $0.id == row.id })?.source {
+        case .provider(let id): return .provider(id)
+        case .newOnProviders: return .discover(.newOnAllProviders)
+        default: return .row(row.id)
+        }
+    }
 
     var body: some View {
         let items = filter == .all ? row.items : row.items.filter(filter.matches)
         if !items.isEmpty || (row.isLoading && row.items.isEmpty) {
-            Shelf(title: row.title, isLoading: row.isLoading && !items.isEmpty) {
+            Shelf(title: row.title, shelfID: row.id, isLoading: row.isLoading && !items.isEmpty, seeAll: items.isEmpty ? nil : allRoute) {
                 if items.isEmpty {
                     PlaceholderShelfItems()
                 } else {
                     ForEach(items) { item in
-                        MediaLink(item: item)
+                        MediaLink(item: item, listRoute: allRoute)
                     }
                 }
             }
@@ -169,7 +165,7 @@ private struct ContinueShelf: View {
     var body: some View {
         let entries = model.continueWatching.filter { filter.matches($0.media) }
         if !entries.isEmpty {
-            Shelf(title: "Weiterschauen") {
+            Shelf(title: "Weiterschauen", shelfID: "continue") {
                 ForEach(entries) { entry in
                     ContinueCard(entry: entry)
                 }
