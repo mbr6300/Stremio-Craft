@@ -4,22 +4,36 @@ import Observation
 @MainActor
 @Observable
 final class AppModel {
-    private let defaults = UserDefaults.standard
+    @ObservationIgnored private let defaults = UserDefaults.standard
     private let continueKey = "continueWatching"
     private let favoriteKey = "favorites"
     private let tmdbKey = "tmdbAPIKey"
     private let countryKey = "discoverCountry"
     private let torrentioKey = "torrentioOptions"
+    private let catalogsKey = "catalogEntries"
+    private let playerKey = "playerChoice"
+    private let autoPlayKey = "autoPlayBest"
 
     var country: String
     var tmdbKeyOverride: String
     var torrentio = TorrentioOptions()
+    var catalogs: [CatalogEntry] = CatalogEntry.defaults
+    var player: PlayerChoice = .infuse
+    var autoPlayBest = true
     var continueWatching: [WatchProgress] = []
     var favorites: [FavoriteItem] = []
     var rows: [CatalogRow] = []
-    var isLoadingCatalog = false
     var hasRealDebridToken = false
-    private var loadedSignature = ""
+    /// Rückmeldung von Infuse (x-callback), wird in der Wiedergabe-Ansicht angezeigt.
+    var playbackNotice: String?
+
+    @ObservationIgnored private var allProgress: [WatchProgress] = []
+    @ObservationIgnored private var loadedSignature = ""
+    @ObservationIgnored private var loadGeneration = 0
+    @ObservationIgnored private var pendingInfuse: PlaybackRequest?
+
+    private static let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("catalog-rows.json")
 
     var tmdbAPIKey: String {
         let override = tmdbKeyOverride.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -36,62 +50,170 @@ final class AppModel {
            let stored = try? JSONDecoder().decode(TorrentioOptions.self, from: data) {
             torrentio = stored
         }
-        reloadLocal()
-    }
-
-    func reloadLocal() {
-        continueWatching = decodeList(WatchProgress.self, key: continueKey)
-            .filter(\.isActive)
-            .sorted { $0.updatedAt > $1.updatedAt }
+        if let data = defaults.data(forKey: catalogsKey),
+           let stored = try? JSONDecoder().decode([CatalogEntry].self, from: data) {
+            catalogs = stored
+        }
+        player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .infuse
+        autoPlayBest = defaults.object(forKey: autoPlayKey) as? Bool ?? true
+        allProgress = decodeList(WatchProgress.self, key: continueKey)
         favorites = decodeList(FavoriteItem.self, key: favoriteKey)
         hasRealDebridToken = KeychainStore.loadToken() != nil
+        refreshContinueWatching()
+        rows = cachedRows()
     }
 
+    // MARK: - Kataloge
+
     func loadCatalogsIfNeeded() async {
-        let signature = "\(country)|\(tmdbAPIKey)"
-        guard signature != loadedSignature else { return }
+        guard catalogSignature != loadedSignature else { return }
         await loadCatalogs()
     }
 
+    /// Ändert sich, wenn Region, Schlüssel oder die aktiven Reihen wechseln. Reihenfolge zählt nicht.
+    var catalogSignature: String {
+        "\(country)|\(tmdbAPIKey)|" + catalogs.filter(\.enabled).map { "\($0.id):\($0.source)" }.sorted().joined(separator: ",")
+    }
+
+    /// Lädt alle Reihen parallel. Bereits bekannte Inhalte (Disk-Cache) bleiben sichtbar,
+    /// jede Reihe wird einzeln ersetzt, sobald sie fertig ist.
     func loadCatalogs() async {
-        reloadLocal()
-        isLoadingCatalog = true
-        defer { isLoadingCatalog = false }
+        loadGeneration += 1
+        let generation = loadGeneration
+        let entries = catalogs.filter(\.enabled)
         guard hasTMDBKey else {
-            rows = Self.placeholderRows(message: "TMDB-API-Schlüssel fehlt. In den Einstellungen eintragen, derselbe Schlüssel wie in Stremio-VMB.")
+            rows = entries.map {
+                CatalogRow(id: $0.id, title: $0.title, items: [], message: "TMDB-API-Schlüssel fehlt. Bitte in den Einstellungen eintragen.")
+            }
             loadedSignature = ""
             return
         }
+        let previous = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        rows = entries.map { entry in
+            var row = previous[entry.id] ?? CatalogRow(id: entry.id, title: entry.title, items: [])
+            row.title = entry.title
+            row.isLoading = true
+            row.message = nil
+            return row
+        }
         let key = tmdbAPIKey
         let region = country
-        var next: [CatalogRow] = []
-        do {
-            let top = try await TMDBClient.fetchTopMovies(apiKey: key, country: region)
-            next.append(CatalogRow(
-                id: "imdb",
-                title: "IMDb Top 100",
-                items: top,
-                message: top.isEmpty ? "Keine Titel von TMDB." : nil
-            ))
-        } catch {
-            next.append(CatalogRow(id: "imdb", title: "IMDb Top 100", items: [], message: error.localizedDescription))
-        }
-        for provider in TMDBClient.providers {
-            do {
-                let items = try await TMDBClient.fetchProviderRow(apiKey: key, provider: provider, country: region)
-                next.append(CatalogRow(
-                    id: provider.id,
-                    title: provider.name,
-                    items: items,
-                    message: items.isEmpty ? "Keine Titel für \(provider.name) in \(region)." : nil
-                ))
-            } catch {
-                next.append(CatalogRow(id: provider.id, title: provider.name, items: [], message: error.localizedDescription))
+        loadedSignature = catalogSignature
+
+        await withTaskGroup(of: (String, Result<[MediaItem], Error>).self) { group in
+            for entry in entries {
+                group.addTask {
+                    do {
+                        return (entry.id, .success(try await Self.fetchItems(entry, apiKey: key, country: region)))
+                    } catch {
+                        return (entry.id, .failure(error))
+                    }
+                }
+            }
+            for await (id, result) in group {
+                guard generation == loadGeneration, let index = rows.firstIndex(where: { $0.id == id }) else { continue }
+                var row = rows[index]
+                row.isLoading = false
+                switch result {
+                case .success(let items):
+                    row.items = items
+                    row.message = items.isEmpty ? "Keine Titel gefunden." : nil
+                case .failure(let error):
+                    // Ältere Inhalte behalten, Fehler nur zeigen, wenn nichts da ist.
+                    row.message = row.items.isEmpty ? error.localizedDescription : nil
+                }
+                rows[index] = row
             }
         }
-        rows = next
-        loadedSignature = "\(region)|\(key)"
+        if generation == loadGeneration {
+            storeRows()
+        }
     }
+
+    private nonisolated static func fetchItems(_ entry: CatalogEntry, apiKey: String, country: String) async throws -> [MediaItem] {
+        switch entry.source {
+        case .tmdbTrending:
+            return try await TMDBClient.fetchTrending(apiKey: apiKey, country: country)
+        case .provider(let id):
+            guard let provider = TMDBClient.providers.first(where: { $0.id == id }) else { return [] }
+            return try await TMDBClient.fetchProviderRow(apiKey: apiKey, provider: provider, country: country)
+        case .url(let url):
+            return try await ListClient.load(url, apiKey: apiKey, country: country).items
+        }
+    }
+
+    func addList(url: String, title: String) async throws -> CatalogEntry {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw AppFailure.message("Bitte eine Adresse eingeben.") }
+        guard hasTMDBKey else { throw AppFailure.message("Für Listen wird der TMDB-Schlüssel benötigt.") }
+        let resolved = try await ListClient.load(trimmed, apiKey: tmdbAPIKey, country: country)
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let entry = CatalogEntry(
+            id: "url-\(UUID().uuidString.prefix(8))",
+            title: name.isEmpty ? (resolved.title ?? "Eigene Liste") : name,
+            source: .url(trimmed)
+        )
+        catalogs.append(entry)
+        saveCatalogs()
+        rows.append(CatalogRow(id: entry.id, title: entry.title, items: resolved.items))
+        loadedSignature = catalogSignature
+        storeRows()
+        return entry
+    }
+
+    func toggleCatalog(_ entry: CatalogEntry) {
+        guard let index = catalogs.firstIndex(of: entry) else { return }
+        catalogs[index].enabled.toggle()
+        saveCatalogs()
+    }
+
+    func moveCatalog(_ entry: CatalogEntry, by offset: Int) {
+        guard let index = catalogs.firstIndex(of: entry) else { return }
+        let target = index + offset
+        guard catalogs.indices.contains(target) else { return }
+        catalogs.swapAt(index, target)
+        saveCatalogs()
+    }
+
+    func removeCatalog(_ entry: CatalogEntry) {
+        catalogs.removeAll { $0.id == entry.id }
+        saveCatalogs()
+    }
+
+    func resetCatalogs() {
+        catalogs = CatalogEntry.defaults
+        saveCatalogs()
+    }
+
+    private func saveCatalogs() {
+        save(catalogs, key: catalogsKey)
+        // Reihenfolge/Sichtbarkeit sofort übernehmen, fehlende Reihen werden beim nächsten Laden geholt.
+        let byId = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        rows = catalogs.filter(\.enabled).map { entry in
+            var row = byId[entry.id] ?? CatalogRow(id: entry.id, title: entry.title, items: [], isLoading: true)
+            row.title = entry.title
+            return row
+        }
+    }
+
+    private func cachedRows() -> [CatalogRow] {
+        let stored = (try? Data(contentsOf: Self.cacheURL))
+            .flatMap { try? JSONDecoder().decode([String: [MediaItem]].self, from: $0) } ?? [:]
+        return catalogs.filter(\.enabled).map {
+            CatalogRow(id: $0.id, title: $0.title, items: stored[$0.id] ?? [], isLoading: true)
+        }
+    }
+
+    private func storeRows() {
+        let snapshot = Dictionary(rows.filter { !$0.items.isEmpty }.map { ($0.id, $0.items) }, uniquingKeysWith: { first, _ in first })
+        Task.detached(priority: .utility) {
+            if let data = try? JSONEncoder().encode(snapshot) {
+                try? data.write(to: Self.cacheURL, options: .atomic)
+            }
+        }
+    }
+
+    // MARK: - Favoriten & Fortschritt
 
     func isFavorite(_ item: MediaItem) -> Bool {
         favorites.contains { $0.tmdbId == item.tmdbId && $0.mediaType == item.normalizedType }
@@ -140,13 +262,57 @@ final class AppModel {
             episodeTitle: episodeTitle,
             updatedAt: Date()
         )
-        var stored = decodeList(WatchProgress.self, key: continueKey).filter { $0.id != entry.id }
+        allProgress.removeAll { $0.id == entry.id }
         if entry.isActive {
-            stored.append(entry)
+            allProgress.append(entry)
         }
-        save(stored, key: continueKey)
-        reloadLocal()
+        save(allProgress, key: continueKey)
+        refreshContinueWatching()
     }
+
+    func removeProgress(_ entry: WatchProgress) {
+        allProgress.removeAll { $0.id == entry.id }
+        save(allProgress, key: continueKey)
+        refreshContinueWatching()
+    }
+
+    private func refreshContinueWatching() {
+        let next = allProgress.filter(\.isActive).sorted { $0.updatedAt > $1.updatedAt }
+        if next != continueWatching { continueWatching = next }
+    }
+
+    // MARK: - Infuse-Rückmeldung
+
+    func beginInfuseSession(_ request: PlaybackRequest) {
+        pendingInfuse = request
+        playbackNotice = nil
+    }
+
+    /// `stremiocraft://infuse-success?position=…` bzw. `stremiocraft://infuse-error?errorMessage=…`
+    func handleCallback(_ url: URL) {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let value: (String) -> String? = { name in items.first { $0.name == name }?.value }
+        switch url.host {
+        case "infuse-success":
+            guard let request = pendingInfuse, let position = value("position").flatMap(Double.init) else { return }
+            saveProgress(
+                media: request.media,
+                position: position,
+                duration: request.durationHint,
+                season: request.season,
+                episode: request.episode,
+                episodeTitle: request.episodeTitle
+            )
+            playbackNotice = "Infuse beendet bei \(WatchProgress.clock(position))."
+        case "infuse-error":
+            playbackNotice = "Infuse meldet: \(value("errorMessage") ?? "Wiedergabe fehlgeschlagen.")"
+        default:
+            break
+        }
+        pendingInfuse = nil
+    }
+
+    // MARK: - Einstellungen
 
     func saveSettings(country: String, tmdbKey: String, torrentio: TorrentioOptions) {
         self.country = country
@@ -154,10 +320,14 @@ final class AppModel {
         self.torrentio = torrentio
         defaults.set(self.country, forKey: countryKey)
         defaults.set(tmdbKeyOverride, forKey: self.tmdbKey)
-        if let data = try? JSONEncoder().encode(torrentio) {
-            defaults.set(data, forKey: torrentioKey)
-        }
-        loadedSignature = ""
+        save(torrentio, key: torrentioKey)
+    }
+
+    func savePlayer(_ choice: PlayerChoice, autoPlay: Bool) {
+        player = choice
+        autoPlayBest = autoPlay
+        defaults.set(choice.rawValue, forKey: playerKey)
+        defaults.set(autoPlay, forKey: autoPlayKey)
     }
 
     func setRealDebridToken(_ token: String?) throws {
@@ -179,7 +349,7 @@ final class AppModel {
         defaults.set(data, forKey: key)
     }
 
-    private static var bundledTMDBKey: String {
+    private static let bundledTMDBKey: String = {
         guard let url = Bundle.main.url(forResource: "LocalSecrets", withExtension: "plist"),
               let data = try? Data(contentsOf: url),
               let object = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
@@ -187,12 +357,5 @@ final class AppModel {
             return ""
         }
         return key.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func placeholderRows(message: String) -> [CatalogRow] {
-        [CatalogRow(id: "imdb", title: "IMDb Top 100", items: [], message: message)]
-            + TMDBClient.providers.map {
-                CatalogRow(id: $0.id, title: $0.name, items: [], message: message)
-            }
-    }
+    }()
 }

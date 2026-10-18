@@ -63,7 +63,10 @@ enum TorrentioClient {
     }
 
     private static func mapStream(_ stream: TorrentioStream) -> StreamCandidate? {
-        let rawName = (stream.name ?? "").replacingOccurrences(of: "Torrentio\n", with: "")
+        // "[RD+] Torrentio\n4k DV" → "4k DV"
+        let rawName = (stream.name ?? "")
+            .replacingOccurrences(of: "Torrentio\n", with: "")
+            .replacingOccurrences(of: #"^\[[^\]]*\]\s*"#, with: "", options: .regularExpression)
         let rawTitle = stream.title ?? rawName
         let quality = extractQuality(rawName.isEmpty ? rawTitle : rawName)
         let size = extractSize(rawTitle)
@@ -74,6 +77,7 @@ enum TorrentioClient {
         let hash = stream.infoHash?.trimmingCharacters(in: .whitespacesAndNewlines)
         if direct == nil && (hash == nil || hash?.isEmpty == true) { return nil }
         let label = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let flags = (stream.name ?? "").uppercased()
         return StreamCandidate(
             id: "\(hash ?? direct?.absoluteString ?? UUID().uuidString)-\(stream.fileIdx ?? 0)",
             title: label.isEmpty ? quality : label,
@@ -82,12 +86,15 @@ enum TorrentioClient {
             infoHash: hash.flatMap { $0.isEmpty ? nil : $0 },
             fileIndex: stream.fileIdx ?? 0,
             directURL: direct,
-            rank: resolutionRank(quality)
+            rank: resolutionRank(quality),
+            isCached: flags.contains("RD+"),
+            fileName: stream.behaviorHints?.filename
         )
     }
 
     static func sortByResolution(_ streams: [StreamCandidate]) -> [StreamCandidate] {
         streams.sorted { lhs, rhs in
+            if lhs.isCached != rhs.isCached { return lhs.isCached }
             if lhs.rank != rhs.rank { return lhs.rank > rhs.rank }
             return lhs.quality < rhs.quality
         }
@@ -151,9 +158,14 @@ private struct TorrentioStream: Decodable {
     var infoHash: String?
     var fileIdx: Int?
     var url: String?
+    var behaviorHints: Hints?
+
+    struct Hints: Decodable {
+        var filename: String?
+    }
 
     enum CodingKeys: String, CodingKey {
-        case name, title, url
+        case name, title, url, behaviorHints
         case infoHash = "infoHash"
         case fileIdx = "fileIdx"
     }

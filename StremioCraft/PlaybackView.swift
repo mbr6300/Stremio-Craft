@@ -8,20 +8,18 @@ struct PlaybackView: View {
     var request: PlaybackRequest
 
     @State private var streams: [StreamCandidate] = []
-    @State private var status = "Streams werden bei Torrentio gesucht…"
+    @State private var status = "Streams werden gesucht…"
     @State private var banner: String?
     @State private var playerURL: URL?
-    @State private var isResolving = false
-    @State private var didAutoStart = false
+    @State private var resolvingId: String?
+    @State private var isLoading = true
+    @State private var didLoad = false
+    @State private var lastResolved: (stream: StreamCandidate, url: URL)?
 
     var body: some View {
         Group {
             if let playerURL {
-                PlayerScreen(
-                    url: playerURL,
-                    resume: request.resumeSeconds,
-                    banner: banner
-                ) { position, duration in
+                PlayerScreen(url: playerURL, resume: request.resumeSeconds) { position, duration in
                     model.saveProgress(
                         media: request.media,
                         position: position,
@@ -35,67 +33,80 @@ struct PlaybackView: View {
                 streamList
             }
         }
-        .background(Color.black)
-        .task { await loadStreams() }
-    }
-
-    private var streamList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Text(request.media.title)
-                    .font(.largeTitle.bold())
-                if let episode = request.episode, let season = request.season {
-                    Text(String(format: "S%02dE%02d %@", season, episode, request.episodeTitle ?? ""))
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-                Text(status)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                if isResolving {
-                    ProgressView()
-                }
-                if let banner {
-                    Text(banner)
-                        .font(.title3)
-                        .foregroundStyle(.yellow)
-                        .frame(maxWidth: 1100, alignment: .leading)
-                }
-                ForEach(streams) { stream in
-                    Button {
-                        Task { await play(stream) }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(stream.quality)
-                                .font(.headline)
-                            Text("\(stream.size)  ·  \(stream.directURL == nil ? "Real-Debrid" : "Direkter Link")")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                            Text(stream.title)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                        .frame(maxWidth: 1100, alignment: .leading)
-                        .padding(12)
-                    }
-                    .buttonStyle(.card)
-                    .disabled(isResolving)
-                }
-            }
-            .padding(48)
+        .background(BackdropLayer(url: request.media.backdropURL))
+        .task {
+            guard !didLoad else { return }
+            didLoad = true
+            await loadStreams()
         }
     }
 
+    // MARK: - Ansicht
+
+    private var streamList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text(request.media.title)
+                    .font(.system(size: 56, weight: .heavy))
+                    .lineLimit(1)
+                if let label = request.episodeLabel {
+                    Text("\(label)  ·  \(request.episodeTitle ?? "")")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+                HStack(spacing: 14) {
+                    if isLoading || resolvingId != nil {
+                        ProgressView()
+                    }
+                    Text(status)
+                        .font(.system(size: 22))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                if let notice = banner ?? model.playbackNotice {
+                    Label(notice, systemImage: "info.circle")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.yellow)
+                        .frame(maxWidth: 1300, alignment: .leading)
+                }
+                if let lastResolved, model.player == .infuse {
+                    HStack(spacing: 20) {
+                        Button("Erneut an Infuse") { openInfuse(lastResolved.url, stream: lastResolved.stream) }
+                        Button("Integrierter Player") { startBuiltIn(lastResolved.url) }
+                    }
+                    .focusSection()
+                }
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    ForEach(streams) { stream in
+                        Button {
+                            Task { await play(stream, with: model.player) }
+                        } label: {
+                            StreamRow(stream: stream, isResolving: resolvingId == stream.id)
+                        }
+                        .buttonStyle(.card)
+                        .disabled(resolvingId != nil)
+                        .contextMenu {
+                            Button("In Infuse öffnen") { Task { await play(stream, with: .infuse) } }
+                            Button("Im integrierten Player") { Task { await play(stream, with: .builtIn) } }
+                        }
+                    }
+                }
+                .padding(.top, 12)
+                .focusSection()
+            }
+            .padding(.horizontal, Theme.pagePadding)
+            .padding(.vertical, 60)
+        }
+    }
+
+    // MARK: - Streams
+
     private func loadStreams() async {
+        defer { isLoading = false }
         guard model.hasTMDBKey else {
             status = "TMDB-API-Schlüssel fehlt. Ohne ihn gibt es keine IMDb-ID für Torrentio."
             return
         }
         let token = KeychainStore.loadToken()
-        if token == nil {
-            status = "Real-Debrid API-Token fehlt. Bitte in den Einstellungen eintragen. Torrentio liefert dann Info-Hashes, die lokal freigeschaltet werden."
-        }
         do {
             let imdb = try await TMDBClient.imdbId(
                 apiKey: model.tmdbAPIKey,
@@ -115,30 +126,40 @@ struct PlaybackView: View {
                 episode: request.episode
             )
             streams = found
-            if found.isEmpty {
-                status = "Keine Streams. Torrentio hat für diesen Titel nichts geliefert."
+            guard !found.isEmpty else {
+                status = "Keine Streams gefunden."
                 return
             }
-            status = "\(found.count) Streams. Beste Qualität zuerst, wie in Stremio-VMB."
-            if request.autoStart, !didAutoStart, let best = found.first {
-                didAutoStart = true
-                await play(best)
+            let cached = found.filter(\.isCached).count
+            status = cached > 0 ? "\(found.count) Streams · \(cached) sofort verfügbar ⚡" : "\(found.count) Streams"
+            if token == nil {
+                banner = "Kein Real-Debrid-Token hinterlegt – bitte in den Einstellungen eintragen."
+            }
+            guard request.autoStart, token != nil else { return }
+            // Nur automatisch starten, wenn der Stream sofort verfügbar ist. Ohne RD-Markierung
+            // (Info-Hash-Modus) den besten nehmen.
+            let anyMarked = found.contains { $0.directURL != nil }
+            if let best = anyMarked ? found.first(where: \.isCached) : found.first {
+                await play(best, with: model.player)
+            } else {
+                status += " · keiner im Real-Debrid-Cache, bitte wählen"
             }
         } catch {
             status = error.localizedDescription
         }
     }
 
-    private func play(_ stream: StreamCandidate) async {
-        isResolving = true
-        defer { isResolving = false }
+    private func play(_ stream: StreamCandidate, with choice: PlayerChoice) async {
+        resolvingId = stream.id
+        banner = nil
+        defer { resolvingId = nil }
         do {
             let url: URL
             if let direct = stream.directURL {
                 url = direct
             } else {
                 guard let token = KeychainStore.loadToken() else {
-                    banner = "Real-Debrid API-Token fehlt. Bitte in den Einstellungen eintragen."
+                    banner = "Real-Debrid-Token fehlt. Bitte in den Einstellungen eintragen."
                     return
                 }
                 guard let hash = stream.infoHash else {
@@ -148,65 +169,85 @@ struct PlaybackView: View {
                 status = "Real-Debrid schaltet \(stream.quality) frei…"
                 url = try await RealDebridClient.resolve(token: token, infoHash: hash, fileIndex: stream.fileIndex)
             }
-            handoff(url)
+            lastResolved = (stream, url)
+            switch choice {
+            case .infuse: openInfuse(url, stream: stream)
+            case .builtIn: startBuiltIn(url)
+            }
         } catch {
             banner = error.localizedDescription
             status = "Stream konnte nicht gestartet werden."
         }
     }
 
-    private func handoff(_ url: URL) {
-        let title = playbackTitle
-        if let infuse = Self.infuseURL(stream: url, title: title), UIApplication.shared.canOpenURL(infuse) {
-            UIApplication.shared.open(infuse, options: [:]) { success in
-                Task { @MainActor in
-                    if success {
-                        banner = "Wiedergabe an Infuse übergeben."
+    // MARK: - Übergabe
+
+    private func openInfuse(_ url: URL, stream: StreamCandidate) {
+        guard let infuse = Self.infuseURL(stream: url, filename: infuseFileName(stream, url: url), position: request.resumeSeconds) else {
+            banner = "Infuse-Adresse konnte nicht gebaut werden."
+            return
+        }
+        model.beginInfuseSession(request)
+        status = "Übergabe an Infuse…"
+        UIApplication.shared.open(infuse, options: [:]) { success in
+            Task { @MainActor in
+                if success {
+                    status = "In Infuse geöffnet."
+                    // Sofort in „Weiterschauen“ aufnehmen; die echte Position meldet Infuse beim Schliessen.
+                    if model.progress(for: request.media) == nil {
                         model.saveProgress(
                             media: request.media,
                             position: max(request.resumeSeconds, 15),
-                            duration: nil,
+                            duration: request.durationHint,
                             season: request.season,
                             episode: request.episode,
                             episodeTitle: request.episodeTitle
                         )
-                    } else {
-                        fallback(url)
                     }
+                } else {
+                    banner = "Infuse liess sich nicht öffnen. Ist Infuse (ab Version 8.4.7) installiert?"
+                    status = "Übergabe fehlgeschlagen."
                 }
             }
-            return
         }
-        fallback(url)
     }
 
-    private func fallback(_ url: URL) {
+    private func startBuiltIn(_ url: URL) {
         if Self.needsInfuse(url) {
-            banner = "Dieses Format braucht Infuse. Infuse ist nicht installiert oder die Adresse konnte nicht geöffnet werden."
-            playerURL = nil
-            return
+            banner = "Dieses Format (z. B. MKV) kann der integrierte Player meist nicht – Infuse empfohlen."
         }
-        banner = "Infuse ist nicht verfügbar. Wiedergabe in der App."
         playerURL = url
     }
 
-    private var playbackTitle: String {
-        if let season = request.season, let episode = request.episode {
-            return "\(request.media.title) \(String(format: "S%02dE%02d", season, episode))"
+    /// Infuse sucht Metadaten anhand des Dateinamens, daher „Titel (Jahr).mkv“ bzw. „Serie S01E02.mkv“.
+    private func infuseFileName(_ stream: StreamCandidate, url: URL) -> String {
+        let source = stream.fileName ?? url.lastPathComponent
+        let ext = (source as NSString).pathExtension.lowercased()
+        var base = request.media.title
+        if let label = request.episodeLabel {
+            base += " \(label)"
+        } else if let year = request.media.year {
+            base += " (\(year))"
         }
-        return request.media.title
+        base = base.components(separatedBy: CharacterSet(charactersIn: "/:\\?%*|\"<>")).joined()
+        return ext.isEmpty || ext.count > 4 ? "\(base).mkv" : "\(base).\(ext)"
     }
 
-    static func infuseURL(stream: URL, title: String) -> URL? {
-        var components = URLComponents()
-        components.scheme = "infuse"
-        components.host = "x-callback-url"
-        components.path = "/play"
-        components.queryItems = [
-            URLQueryItem(name: "url", value: stream.absoluteString),
-            URLQueryItem(name: "title", value: title)
-        ]
-        return components.url
+    /// Alle Werte streng kodiert – sonst gehen `&`, `+` oder `?` aus der Stream-Adresse
+    /// in Infuse verloren (das alte `URLQueryItem` liess `+`, `/`, `:` und `?` stehen).
+    static func infuseURL(stream: URL, filename: String, position: Double) -> URL? {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        func encode(_ value: String) -> String {
+            value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+        }
+        var parts = ["url=\(encode(stream.absoluteString))", "filename=\(encode(filename))"]
+        if position >= 15 {
+            parts.append("position=\(Int(position))")
+        }
+        parts.append("x-success=\(encode("stremiocraft://infuse-success"))")
+        parts.append("x-error=\(encode("stremiocraft://infuse-error"))")
+        return URL(string: "infuse://x-callback-url/play?" + parts.joined(separator: "&"))
     }
 
     static func needsInfuse(_ url: URL) -> Bool {
@@ -215,10 +256,62 @@ struct PlaybackView: View {
     }
 }
 
+private struct StreamRow: View {
+    var stream: StreamCandidate
+    var isResolving: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 22) {
+            VStack(spacing: 8) {
+                Text(qualityBadge)
+                    .font(.system(size: 22, weight: .heavy))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Theme.accent.opacity(stream.rank >= 80 ? 1 : 0.45), in: Capsule())
+                if stream.isCached {
+                    Label("Sofort", systemImage: "bolt.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.yellow)
+                }
+            }
+            .frame(width: 140)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(stream.quality)
+                    .font(.system(size: 22, weight: .semibold))
+                    .lineLimit(1)
+                Text(stream.title.replacingOccurrences(of: "\n", with: "  ·  "))
+                    .font(.system(size: 18))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 20)
+            if isResolving {
+                ProgressView()
+            } else {
+                Text(stream.size)
+                    .font(.system(size: 20, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .frame(width: 1400, alignment: .leading)
+    }
+
+    private var qualityBadge: String {
+        switch stream.rank {
+        case 100: return "4K"
+        case 80: return "1080p"
+        case 60: return "720p"
+        case 40: return "SD"
+        default: return stream.quality.components(separatedBy: " ").first?.uppercased() ?? "?"
+        }
+    }
+}
+
 struct PlayerScreen: View {
     var url: URL
     var resume: Double
-    var banner: String?
     var onProgress: (Double, Double) -> Void
 
     @StateObject private var controller = PlayerController()
@@ -228,20 +321,17 @@ struct PlayerScreen: View {
         ZStack(alignment: .topLeading) {
             VideoPlayer(player: controller.player)
                 .ignoresSafeArea()
-            if let text = failure ?? banner {
-                Text(text)
+            if let failure {
+                Text("\(failure) Dieses Format braucht vermutlich Infuse.")
                     .font(.headline)
                     .padding(16)
-                    .background(.black.opacity(0.7))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
                     .padding(36)
             }
         }
         .onAppear {
             controller.onProgress = onProgress
-            controller.onFailure = { message in
-                failure = "\(message) Dieses Format braucht vermutlich Infuse."
-            }
+            controller.onFailure = { failure = $0 }
             controller.load(url: url, resume: resume)
         }
         .onDisappear {
@@ -273,13 +363,14 @@ final class PlayerController: ObservableObject {
                 }
             }
         player.replaceCurrentItem(with: item)
+        // Seltener speichern: jeder Speichervorgang aktualisiert „Weiterschauen“ und damit die Startseite.
         observer = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 5, preferredTimescale: 1),
+            forInterval: CMTime(seconds: 20, preferredTimescale: 1),
             queue: .main
         ) { [weak self] time in
             let seconds = time.seconds
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.player.rate > 0 else { return }
                 let duration = self.player.currentItem?.duration.seconds ?? 0
                 self.onProgress?(seconds, duration.isFinite ? duration : 0)
             }
@@ -289,12 +380,16 @@ final class PlayerController: ObservableObject {
 
     func teardown() {
         let duration = player.currentItem?.duration.seconds ?? 0
-        onProgress?(player.currentTime().seconds, duration.isFinite ? duration : 0)
+        let position = player.currentTime().seconds
+        if position.isFinite, position > 0 {
+            onProgress?(position, duration.isFinite ? duration : 0)
+        }
         if let observer {
             player.removeTimeObserver(observer)
             self.observer = nil
         }
         statusCancellable = nil
         player.pause()
+        player.replaceCurrentItem(with: nil)
     }
 }

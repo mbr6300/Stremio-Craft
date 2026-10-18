@@ -34,6 +34,7 @@ struct EpisodeInfo: Identifiable, Hashable {
     var name: String
     var overview: String
     var stillURL: URL?
+    var runtime: Int?
     var id: String { "\(seasonNumber)-\(episodeNumber)" }
     var label: String { String(format: "S%02dE%02d", seasonNumber, episodeNumber) }
 }
@@ -55,6 +56,43 @@ struct StreamCandidate: Identifiable, Hashable {
     var fileIndex: Int
     var directURL: URL?
     var rank: Int
+    /// Torrentio markiert sofort verfügbare Real-Debrid-Streams mit `[RD+]`.
+    var isCached = false
+    var fileName: String?
+}
+
+/// Eine Zeile auf der Startseite. Reihenfolge und Sichtbarkeit sind in den Einstellungen änderbar.
+struct CatalogEntry: Codable, Identifiable, Hashable {
+    var id: String
+    var title: String
+    var source: CatalogSource
+    var enabled = true
+
+    var isBuiltIn: Bool {
+        if case .url = source { return false }
+        return true
+    }
+
+    static let defaults: [CatalogEntry] = [
+        CatalogEntry(id: "trending", title: "Im Trend", source: .tmdbTrending),
+        CatalogEntry(id: "imdb-top", title: "IMDb Top 250", source: .url("https://www.imdb.com/chart/top/"))
+    ] + TMDBClient.providers.map {
+        CatalogEntry(id: $0.id, title: $0.name, source: .provider($0.id))
+    }
+}
+
+enum CatalogSource: Codable, Hashable {
+    case tmdbTrending
+    case provider(String)
+    /// IMDb-Liste/-Chart, MDBList, TMDB-Liste, Stremio-Addon-Katalog oder beliebige Seite mit IMDb-IDs.
+    case url(String)
+}
+
+enum PlayerChoice: String, Codable, CaseIterable, Identifiable {
+    case infuse
+    case builtIn
+    var id: String { rawValue }
+    var label: String { self == .infuse ? "Infuse" : "Integrierter Player" }
 }
 
 struct WatchProgress: Identifiable, Hashable, Codable {
@@ -146,20 +184,27 @@ struct PlaybackRequest: Hashable {
     var episodeTitle: String?
     var resumeSeconds: Double
     var autoStart: Bool
+    /// Laufzeit laut TMDB in Sekunden. Infuse meldet nur die Position zurück.
+    var durationHint: Double?
+
+    var episodeLabel: String? {
+        guard let season, let episode else { return nil }
+        return String(format: "S%02dE%02d", season, episode)
+    }
 }
 
 enum AppRoute: Hashable {
     case detail(MediaItem)
     case play(PlaybackRequest)
-    case settings
-    case search
+    case lists
 }
 
-struct CatalogRow: Identifiable {
+struct CatalogRow: Identifiable, Equatable {
     var id: String
     var title: String
     var items: [MediaItem]
     var message: String?
+    var isLoading = false
 }
 
 enum AppFailure: LocalizedError {

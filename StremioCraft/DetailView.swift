@@ -6,233 +6,248 @@ struct DetailView: View {
 
     @State private var detail: TitleDetail?
     @State private var episodes: [EpisodeInfo] = []
-    @State private var selectedSeason = 1
-    @State private var selectedEpisode: EpisodeInfo?
-    @State private var status = "Details werden geladen…"
-    @State private var failed = false
+    @State private var selectedSeason: Int?
+    @State private var status: String?
+    @State private var loadingEpisodes = false
 
     private var shown: MediaItem { detail?.media ?? item }
     private var saved: WatchProgress? { model.progress(for: shown) }
+    private var isSeries: Bool { shown.normalizedType == "tv" }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                HStack(alignment: .top, spacing: 40) {
-                    PosterCard(title: shown.title, subtitle: nil, posterURL: shown.posterURL, progress: nil, showsCaption: false)
-                        .frame(width: 250)
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text(shown.title)
-                            .font(.system(size: 52, weight: .bold))
-                            .lineLimit(3)
-                        metaLine
-                        Text(shown.overview.isEmpty ? "Keine Beschreibung." : shown.overview)
-                            .font(.title3)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .frame(maxWidth: 1100, alignment: .leading)
-                        actions
-                        if failed {
-                            Text(status)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                if shown.normalizedType == "tv" {
-                    seasonPicker
-                    episodeList
+            VStack(alignment: .leading, spacing: 40) {
+                header
+                    .padding(.horizontal, Theme.pagePadding)
+                    .padding(.top, 220)
+                if isSeries {
+                    seasonBar
+                    episodeShelf
                 }
             }
-            .padding(.horizontal, 80)
-            .padding(.top, 48)
-            .padding(.bottom, 200)
+            .padding(.bottom, 80)
         }
-        .background(backdrop)
+        .scrollClipDisabled()
+        .background(BackdropLayer(url: shown.backdropURL))
         .task { await load() }
-        .onChange(of: selectedSeason) { _, season in
-            Task { await loadEpisodes(season) }
-        }
     }
 
-    private var backdrop: some View {
-        ZStack {
-            Color.black
-            if let url = shown.backdropURL {
-                AsyncImage(url: url) { phase in
-                    if case .success(let image) = phase {
-                        image.resizable().scaledToFill().opacity(0.28)
-                    }
-                }
-                .ignoresSafeArea()
+    // MARK: - Kopf
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(shown.title)
+                .font(.system(size: 64, weight: .heavy))
+                .lineLimit(2)
+                .minimumScaleFactor(0.6)
+            Text(metaText)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Theme.accent)
+            Text(shown.overview.isEmpty ? "Keine Beschreibung." : shown.overview)
+                .font(.system(size: 24))
+                .foregroundStyle(.white.opacity(0.8))
+                .lineLimit(5)
+                .frame(maxWidth: 1050, alignment: .leading)
+            if let status {
+                Text(status)
+                    .font(.system(size: 20))
+                    .foregroundStyle(.yellow)
             }
+            actions
+                .padding(.top, 12)
+                .focusSection()
         }
     }
 
-    private var metaLine: some View {
-        let genres = detail?.genres.joined(separator: ", ") ?? ""
-        let runtime = detail?.runtime.map { "\($0) Min." } ?? ""
-        let rating = shown.rating.map { String(format: "★ %.1f", $0) } ?? ""
-        let parts = [shown.yearText, rating, runtime, genres].filter { !$0.isEmpty }
-        return Text(parts.joined(separator: "  ·  "))
-            .font(.headline)
-            .foregroundStyle(.secondary)
+    private var metaText: String {
+        var parts = [shown.metaText]
+        if let runtime = detail?.runtime, runtime > 0 { parts.append("\(runtime) Min.") }
+        if let genres = detail?.genres, !genres.isEmpty { parts.append(genres.prefix(3).joined(separator: ", ")) }
+        return parts.joined(separator: "  ·  ")
     }
 
     private var actions: some View {
-        HStack(spacing: 20) {
-            if shown.normalizedType == "movie" {
-                NavigationLink(value: playMovie(resume: false)) {
-                    Label("Abspielen", systemImage: "play.fill")
+        HStack(spacing: 24) {
+            if let primary = primaryRequest {
+                NavigationLink(value: AppRoute.play(primary.request)) {
+                    Label(primary.label, systemImage: "play.fill")
+                        .font(.system(size: 26, weight: .bold))
+                        .padding(.horizontal, 12)
                 }
-                if let saved {
-                    NavigationLink(value: playMovie(resume: true, progress: saved)) {
-                        Label("Fortsetzen \(WatchProgress.clock(saved.position))", systemImage: "gobackward")
-                    }
-                }
-            } else if let episode = selectedEpisode ?? resumeEpisode {
-                NavigationLink(value: playEpisode(episode, resume: resumeMatches(episode))) {
-                    Label(resumeMatches(episode) ? "Fortsetzen \(episode.label)" : "Abspielen \(episode.label)", systemImage: "play.fill")
+                .buttonStyle(.borderedProminent)
+
+                NavigationLink(value: AppRoute.play(withAutoStart(primary.request, false))) {
+                    Label("Streams", systemImage: "list.bullet")
                 }
             }
-            Button(model.isFavorite(shown) ? "Favorit entfernen" : "Zu Favoriten") {
+            if !isSeries, let saved, saved.position >= 15 {
+                NavigationLink(value: AppRoute.play(movieRequest(resume: 0))) {
+                    Label("Von vorne", systemImage: "arrow.counterclockwise")
+                }
+            }
+            Button {
                 model.toggleFavorite(shown)
+            } label: {
+                Image(systemName: model.isFavorite(shown) ? "heart.fill" : "heart")
+                    .foregroundStyle(model.isFavorite(shown) ? .red : .white)
             }
         }
-        .font(.title3)
+        .font(.system(size: 24, weight: .semibold))
     }
 
-    private var resumeEpisode: EpisodeInfo? {
-        guard let saved, let season = saved.season, let episode = saved.episode else { return nil }
-        return EpisodeInfo(
-            seasonNumber: season,
-            episodeNumber: episode,
-            name: saved.episodeTitle ?? "Folge \(episode)",
-            overview: "",
-            stillURL: nil
-        )
-    }
-
-    private var seasonPicker: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Staffeln")
-                .font(.title2.weight(.semibold))
-            if (detail?.seasons ?? []).isEmpty {
-                Text(status)
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 16) {
-                        ForEach(detail?.seasons ?? []) { season in
-                            Button(season.name) {
-                                selectedSeason = season.seasonNumber
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(selectedSeason == season.seasonNumber ? .red : .gray)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
+    private var primaryRequest: (label: String, request: PlaybackRequest)? {
+        if !isSeries {
+            if let saved, saved.position >= 15 {
+                return ("Fortsetzen · \(WatchProgress.clock(saved.position))", movieRequest(resume: saved.position))
             }
+            return ("Abspielen", movieRequest(resume: 0))
         }
+        if let saved, let season = saved.season, let episode = saved.episode {
+            let info = episodes.first { $0.seasonNumber == season && $0.episodeNumber == episode }
+            let request = PlaybackRequest(
+                media: shown,
+                season: season,
+                episode: episode,
+                episodeTitle: saved.episodeTitle,
+                resumeSeconds: saved.position,
+                autoStart: model.autoPlayBest,
+                durationHint: info?.runtime.map { Double($0 * 60) } ?? saved.duration
+            )
+            return ("Fortsetzen · \(String(format: "S%02dE%02d", season, episode))", request)
+        }
+        guard let first = episodes.first else { return nil }
+        return ("Abspielen · \(first.label)", episodeRequest(first))
     }
 
-    private var episodeList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Folgen")
-                .font(.title2.weight(.semibold))
-            if episodes.isEmpty {
-                Text("Keine Folgen geladen.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(episodes) { episode in
+    // MARK: - Staffeln & Folgen
+
+    private var seasonBar: some View {
+        let seasons = detail?.seasons ?? []
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 18) {
+                ForEach(seasons) { season in
                     Button {
-                        selectedEpisode = episode
+                        guard selectedSeason != season.seasonNumber else { return }
+                        selectedSeason = season.seasonNumber
+                        Task { await loadEpisodes(season.seasonNumber) }
                     } label: {
-                        HStack(alignment: .top, spacing: 16) {
-                            Text(episode.label)
-                                .font(.headline.monospacedDigit())
-                                .frame(width: 120, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(episode.name)
-                                    .font(.headline)
-                                if !episode.overview.isEmpty {
-                                    Text(episode.overview)
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
+                        Text(season.name)
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(selectedSeason == season.seasonNumber ? Theme.accent : .white)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(.horizontal, Theme.pagePadding)
+            .padding(.vertical, 12)
+        }
+        .scrollClipDisabled()
+        .focusSection()
+    }
+
+    private var episodeShelf: some View {
+        Group {
+            if loadingEpisodes && episodes.isEmpty {
+                ProgressView().padding(.horizontal, Theme.pagePadding)
+            } else if episodes.isEmpty {
+                EmptyHint(text: "Keine Folgen geladen.", symbol: "tv")
+                    .padding(.horizontal, Theme.pagePadding)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(alignment: .top, spacing: 40) {
+                            ForEach(episodes) { episode in
+                                NavigationLink(value: AppRoute.play(episodeRequest(episode))) {
+                                    EpisodeCard(episode: episode, progress: episodeProgress(episode))
                                 }
-                            }
-                            Spacer()
-                            if selectedEpisode?.id == episode.id {
-                                Image(systemName: "checkmark.circle.fill")
+                                .buttonStyle(PosterButtonStyle())
+                                .id(episode.id)
                             }
                         }
-                        .padding(16)
-                        .frame(maxWidth: 1200, alignment: .leading)
+                        .padding(.horizontal, Theme.pagePadding)
+                        .padding(.vertical, 24)
                     }
-                    .buttonStyle(.card)
+                    .scrollClipDisabled()
+                    .onAppear {
+                        if let saved, saved.season == selectedSeason, let episode = saved.episode {
+                            proxy.scrollTo("\(saved.season ?? 0)-\(episode)", anchor: .leading)
+                        }
+                    }
                 }
+                .focusSection()
             }
         }
     }
 
-    private func playMovie(resume: Bool, progress: WatchProgress? = nil) -> PlaybackRequest {
+    private func episodeProgress(_ episode: EpisodeInfo) -> Double? {
+        guard let saved, saved.season == episode.seasonNumber, saved.episode == episode.episodeNumber else { return nil }
+        return saved.fraction ?? 0.05
+    }
+
+    // MARK: - Anfragen
+
+    private func movieRequest(resume: Double) -> PlaybackRequest {
         PlaybackRequest(
             media: shown,
             season: nil,
             episode: nil,
             episodeTitle: nil,
-            resumeSeconds: resume ? (progress?.position ?? 0) : 0,
-            autoStart: true
+            resumeSeconds: resume,
+            autoStart: model.autoPlayBest,
+            durationHint: detail?.runtime.map { Double($0 * 60) }
         )
     }
 
-    private func playEpisode(_ episode: EpisodeInfo, resume: Bool) -> PlaybackRequest {
-        PlaybackRequest(
+    private func episodeRequest(_ episode: EpisodeInfo) -> PlaybackRequest {
+        let resume = saved.flatMap { saved -> Double? in
+            saved.season == episode.seasonNumber && saved.episode == episode.episodeNumber ? saved.position : nil
+        } ?? 0
+        return PlaybackRequest(
             media: shown,
             season: episode.seasonNumber,
             episode: episode.episodeNumber,
             episodeTitle: episode.name,
-            resumeSeconds: resume ? (saved?.position ?? 0) : 0,
-            autoStart: true
+            resumeSeconds: resume,
+            autoStart: model.autoPlayBest,
+            durationHint: (episode.runtime ?? detail?.runtime).map { Double($0 * 60) }
         )
     }
 
-    private func resumeMatches(_ episode: EpisodeInfo) -> Bool {
-        saved?.season == episode.seasonNumber && saved?.episode == episode.episodeNumber && (saved?.position ?? 0) >= 15
+    private func withAutoStart(_ request: PlaybackRequest, _ autoStart: Bool) -> PlaybackRequest {
+        var copy = request
+        copy.autoStart = autoStart
+        return copy
     }
 
+    // MARK: - Laden
+
     private func load() async {
+        guard detail == nil else { return }
         guard model.hasTMDBKey else {
-            status = "TMDB-API-Schlüssel fehlt. Details und Folgen brauchen denselben Schlüssel wie Stremio-VMB."
-            failed = true
+            status = "TMDB-API-Schlüssel fehlt."
             return
         }
         do {
             let loaded = try await TMDBClient.fetchDetail(apiKey: model.tmdbAPIKey, item: item)
             detail = loaded
-            failed = false
+            status = nil
             if loaded.media.normalizedType == "tv" {
                 let season = saved?.season ?? loaded.seasons.first?.seasonNumber ?? 1
                 selectedSeason = season
                 await loadEpisodes(season)
-                if let saved, let episode = saved.episode {
-                    selectedEpisode = episodes.first { $0.episodeNumber == episode } ?? resumeEpisode
-                } else {
-                    selectedEpisode = episodes.first
-                }
             }
         } catch {
             status = error.localizedDescription
-            failed = true
         }
     }
 
     private func loadEpisodes(_ season: Int) async {
-        guard shown.normalizedType == "tv", model.hasTMDBKey else { return }
+        guard model.hasTMDBKey else { return }
+        loadingEpisodes = true
+        defer { loadingEpisodes = false }
         do {
-            episodes = try await TMDBClient.fetchEpisodes(apiKey: model.tmdbAPIKey, tmdbId: shown.tmdbId, season: season)
-            if selectedEpisode?.seasonNumber != season {
-                selectedEpisode = episodes.first
-            }
+            let loaded = try await TMDBClient.fetchEpisodes(apiKey: model.tmdbAPIKey, tmdbId: shown.tmdbId, season: season)
+            if selectedSeason == season { episodes = loaded }
         } catch {
             episodes = []
             status = error.localizedDescription
@@ -240,4 +255,27 @@ struct DetailView: View {
     }
 }
 
+private struct EpisodeCard: View {
+    var episode: EpisodeInfo
+    var progress: Double?
+    @Environment(\.isFocused) private var isFocused
 
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            PosterArtwork(url: episode.stillURL, size: Theme.stillSize, progress: progress, symbol: "tv")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(episode.episodeNumber). \(episode.name)")
+                    .font(.system(size: 22, weight: .semibold))
+                    .lineLimit(1)
+                Text(episode.overview.isEmpty ? episode.label : episode.overview)
+                    .font(.system(size: 18))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .lineLimit(2)
+            }
+            .frame(width: Theme.stillSize.width, alignment: .leading)
+            .foregroundStyle(isFocused ? .white : .white.opacity(0.75))
+            .offset(y: isFocused ? 14 : 0)
+            .animation(.easeOut(duration: 0.2), value: isFocused)
+        }
+    }
+}

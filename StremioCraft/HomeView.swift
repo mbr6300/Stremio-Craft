@@ -1,196 +1,176 @@
 import SwiftUI
 
+/// Startseite: oben Infos zum fokussierten Titel (wie Stremio/Apple TV), darunter die Regale.
 struct HomeView: View {
     @Environment(AppModel.self) private var model
+    @State private var hero = HeroState()
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                header
-                    .focusSection()
-                continueRow
-                favoritesRow
-                ForEach(model.rows) { row in
-                    shelf(title: row.title) {
-                        if row.items.isEmpty {
-                            EmptyHint(text: row.message ?? "Keine Titel.")
-                        } else {
-                            horizontal {
-                                ForEach(row.items) { item in
-                                    MediaLink(item: item, subtitle: item.yearText, progress: nil)
-                                }
-                            }
-                        }
-                    }
-                }
-                if model.isLoadingCatalog {
-                    ProgressView("Kataloge werden geladen…")
-                        .padding(.bottom, 40)
-                }
+        ZStack(alignment: .topLeading) {
+            HeroBackdrop(fallback: model.rows.first?.items.first)
+            VStack(alignment: .leading, spacing: 0) {
+                HeroInfo(fallback: model.rows.first?.items.first)
+                    .frame(height: 330, alignment: .bottomLeading)
+                    .padding(.horizontal, Theme.pagePadding)
+                ShelvesList()
             }
-            .padding(.horizontal, 80)
-            .padding(.top, 36)
-            .padding(.bottom, 200)
         }
-        .background(Color.black)
-        .task {
+        .environment(hero)
+        .task(id: model.catalogSignature) {
             await model.loadCatalogsIfNeeded()
         }
     }
+}
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: 24) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Stremio Craft")
-                    .font(.system(size: 56, weight: .bold))
-                Text("Kataloge über TMDB, Wiedergabe über Torrentio und Real-Debrid")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+private struct HeroBackdrop: View {
+    var fallback: MediaItem?
+    @Environment(HeroState.self) private var hero
+    @State private var shown: URL?
+
+    var body: some View {
+        BackdropLayer(url: shown)
+            // Beim schnellen Durchscrollen nicht jedes Hintergrundbild laden.
+            .task(id: (hero.item ?? fallback)?.id) {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard !Task.isCancelled else { return }
+                shown = (hero.item ?? fallback)?.backdropURL
             }
-            Spacer()
-            NavigationLink(value: AppRoute.search) {
-                Label("Suche", systemImage: "magnifyingglass")
-                    .font(.title3)
-            }
-            NavigationLink(value: AppRoute.settings) {
-                Label("Einstellungen", systemImage: "gearshape")
-                    .font(.title3)
-            }
-        }
-    }
-
-    private var continueRow: some View {
-        shelf(title: "Weiterschauen") {
-            if model.continueWatching.isEmpty {
-                EmptyHint(text: "Noch nichts angefangen. Starte einen Film oder eine Folge.")
-            } else {
-                horizontal {
-                    ForEach(model.continueWatching) { entry in
-                        NavigationLink(value: AppRoute.play(playRequest(entry))) {
-                            PosterCard(
-                                title: entry.title,
-                                subtitle: entry.subtitle,
-                                posterURL: entry.posterURL,
-                                progress: fraction(entry)
-                            )
-                        }
-                        .buttonStyle(.card)
-                    }
-                }
-            }
-        }
-    }
-
-    private var favoritesRow: some View {
-        shelf(title: "Favoriten") {
-            if model.favorites.isEmpty {
-                EmptyHint(text: "Keine Favoriten. Auf der Detailseite hinzufügen.")
-            } else {
-                horizontal {
-                    ForEach(model.favorites) { favorite in
-                        MediaLink(item: favorite.media, subtitle: favorite.year.map(String.init), progress: nil)
-                    }
-                }
-            }
-        }
-    }
-
-    private func playRequest(_ entry: WatchProgress) -> PlaybackRequest {
-        PlaybackRequest(
-            media: entry.media,
-            season: entry.season,
-            episode: entry.episode,
-            episodeTitle: entry.episodeTitle,
-            resumeSeconds: entry.position,
-            autoStart: true
-        )
-    }
-
-    private func fraction(_ entry: WatchProgress) -> Double? {
-        guard let duration = entry.duration, duration > 0 else { return nil }
-        return entry.position / duration
-    }
-
-    private func shelf<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.title2.weight(.semibold))
-            content()
-        }
-        .focusSection()
-    }
-
-    private func horizontal<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 40) {
-                content()
-            }
-            .padding(.vertical, 28)
-            .padding(.trailing, 80)
-        }
-        .focusSection()
     }
 }
 
-struct SearchView: View {
-    @Environment(AppModel.self) private var model
-    @State private var query = ""
-    @State private var results: [MediaItem] = []
-    @State private var message = "Titel suchen. Quelle ist die TMDB-Suche, Sprache Deutsch, wie in Stremio-VMB."
-    @State private var isSearching = false
+private struct HeroInfo: View {
+    var fallback: MediaItem?
+    @Environment(HeroState.self) private var hero
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                Text("Suche")
-                    .font(.largeTitle.bold())
-                HStack(spacing: 20) {
-                    TextField("Film oder Serie", text: $query)
-                        .frame(width: 700)
-                    Button("Suchen") {
-                        Task { await search() }
-                    }
-                    .disabled(isSearching)
+        if let item = hero.item ?? fallback {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(item.title)
+                    .font(.system(size: 54, weight: .heavy))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(item.metaText)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                Text(item.overview)
+                    .font(.system(size: 22))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(3)
+                    .frame(maxWidth: 1000, alignment: .leading)
+            }
+            .padding(.bottom, 10)
+            .id(item.id)
+            .transition(.opacity)
+            .animation(.easeOut(duration: 0.2), value: item.id)
+        } else {
+            Text("Stremio Craft")
+                .font(.system(size: 54, weight: .heavy))
+        }
+    }
+}
+
+private struct ShelvesList: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                ContinueShelf()
+                ForEach(model.rows) { row in
+                    CatalogShelf(row: row)
                 }
-                .focusSection()
-                if isSearching {
-                    ProgressView("Suche…")
-                } else if results.isEmpty {
-                    Text(message)
-                        .foregroundStyle(.secondary)
-                        .focusable()
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 28)], alignment: .leading, spacing: 28) {
-                        ForEach(results) { item in
-                            MediaLink(item: item, subtitle: item.yearText, progress: nil)
-                        }
-                    }
-                    .focusSection()
+                if model.rows.isEmpty {
+                    EmptyHint(text: "Keine Reihen aktiv. In den Einstellungen unter „Listen & Reihen“ einschalten.")
+                        .padding(.horizontal, Theme.pagePadding)
                 }
             }
-            .padding(.horizontal, 80)
-            .padding(.top, 48)
-            .padding(.bottom, 200)
+            .padding(.bottom, 80)
         }
-        .background(Color.black)
+        .scrollClipDisabled()
+    }
+}
+
+private struct CatalogShelf: View, Equatable {
+    var row: CatalogRow
+
+    var body: some View {
+        if !row.items.isEmpty || row.isLoading {
+            Shelf(title: row.title, isLoading: row.isLoading && !row.items.isEmpty) {
+                if row.items.isEmpty {
+                    PlaceholderShelfItems()
+                } else {
+                    ForEach(row.items) { item in
+                        MediaLink(item: item)
+                    }
+                }
+            }
+        } else if let message = row.message {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.title)
+                    .font(.system(size: 30, weight: .bold))
+                EmptyHint(text: message, symbol: "exclamationmark.triangle")
+            }
+            .padding(.horizontal, Theme.pagePadding)
+            .padding(.bottom, 24)
+        }
+    }
+}
+
+private struct ContinueShelf: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if !model.continueWatching.isEmpty {
+            Shelf(title: "Weiterschauen") {
+                ForEach(model.continueWatching) { entry in
+                    ContinueCard(entry: entry)
+                }
+            }
+        }
+    }
+}
+
+struct ContinueCard: View {
+    @Environment(AppModel.self) private var model
+    var entry: WatchProgress
+
+    var body: some View {
+        NavigationLink(value: AppRoute.play(entry.playRequest(autoStart: model.autoPlayBest))) {
+            FocusReporter(item: entry.media) {
+                PosterCard(
+                    title: entry.title,
+                    subtitle: entry.subtitle,
+                    posterURL: entry.posterURL,
+                    progress: entry.fraction
+                )
+            }
+        }
+        .buttonStyle(PosterButtonStyle())
+        .contextMenu {
+            Button(role: .destructive) {
+                model.removeProgress(entry)
+            } label: {
+                Label("Aus Weiterschauen entfernen", systemImage: "xmark")
+            }
+        }
+    }
+}
+
+extension WatchProgress {
+    var fraction: Double? {
+        guard let duration, duration > 0 else { return nil }
+        return position / duration
     }
 
-    private func search() async {
-        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        guard model.hasTMDBKey else {
-            message = "TMDB-API-Schlüssel fehlt. Bitte in den Einstellungen eintragen."
-            results = []
-            return
-        }
-        isSearching = true
-        defer { isSearching = false }
-        do {
-            results = try await TMDBClient.search(apiKey: model.tmdbAPIKey, query: text)
-            message = results.isEmpty ? "Nichts gefunden." : ""
-        } catch {
-            results = []
-            message = error.localizedDescription
-        }
+    func playRequest(autoStart: Bool) -> PlaybackRequest {
+        PlaybackRequest(
+            media: media,
+            season: season,
+            episode: episode,
+            episodeTitle: episodeTitle,
+            resumeSeconds: position,
+            autoStart: autoStart,
+            durationHint: duration
+        )
     }
 }

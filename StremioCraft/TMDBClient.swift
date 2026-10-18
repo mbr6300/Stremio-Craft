@@ -36,22 +36,36 @@ enum TMDBClient {
         }
     }
 
-    static func fetchTopMovies(apiKey: String, country: String) async throws -> [MediaItem] {
-        var items: [MediaItem] = []
-        let lang = language(for: country)
-        for page in 1...5 {
-            let url = try makeURL("/movie/top_rated", [
-                "api_key": apiKey,
-                "language": lang,
-                "region": country,
-                "page": String(page)
-            ])
-            let pageItems = try await get(url, decode: { (page: TMDBPage) in
-                page.results.compactMap { parseMovie($0) }
-            })
-            items.append(contentsOf: pageItems)
+    static func fetchTrending(apiKey: String, country: String) async throws -> [MediaItem] {
+        let url = try makeURL("/trending/all/week", [
+            "api_key": apiKey,
+            "language": language(for: country)
+        ])
+        return try await get(url) { (payload: MultiSearchPayload) in
+            payload.results.compactMap(parseAny)
         }
-        return Array(items.prefix(100))
+    }
+
+    /// IMDb-ID → TMDB-Titel. Grundlage für alle URL-Listen.
+    static func find(apiKey: String, imdbId: String, country: String) async throws -> MediaItem? {
+        let url = try makeURL("/find/\(imdbId)", [
+            "api_key": apiKey,
+            "external_source": "imdb_id",
+            "language": language(for: country)
+        ])
+        return try await get(url) { (payload: FindPayload) in
+            payload.movieResults.first.flatMap(parseMovie) ?? payload.tvResults.first.flatMap(parseTV)
+        }
+    }
+
+    static func fetchList(apiKey: String, listId: String, country: String) async throws -> (name: String?, items: [MediaItem]) {
+        let url = try makeURL("/list/\(listId)", [
+            "api_key": apiKey,
+            "language": language(for: country)
+        ])
+        return try await get(url) { (payload: ListPayload) in
+            (payload.name, payload.items.compactMap(parseAny))
+        }
     }
 
     static func fetchProviderRow(apiKey: String, provider: Provider, country: String) async throws -> [MediaItem] {
@@ -72,24 +86,26 @@ enum TMDBClient {
             "include_adult": "false"
         ])
         return try await get(url) { (payload: MultiSearchPayload) in
-            payload.results.compactMap { entry -> MediaItem? in
-                guard let kind = entry.mediaType, kind == "movie" || kind == "tv" else { return nil }
-                guard let id = entry.id else { return nil }
-                let title = entry.title ?? entry.name ?? ""
-                guard !title.isEmpty else { return nil }
-                let date = entry.releaseDate ?? entry.firstAirDate
-                return MediaItem(
-                    tmdbId: id,
-                    mediaType: kind,
-                    title: title,
-                    overview: entry.overview ?? "",
-                    posterURL: image(entry.posterPath, size: "w500"),
-                    backdropURL: image(entry.backdropPath, size: "w1280"),
-                    year: year(from: date),
-                    rating: entry.voteAverage
-                )
-            }
+            payload.results.compactMap(parseAny)
         }
+    }
+
+    private static func parseAny(_ entry: SearchEntry) -> MediaItem? {
+        guard let kind = entry.mediaType, kind == "movie" || kind == "tv" else { return nil }
+        guard let id = entry.id else { return nil }
+        let title = entry.title ?? entry.name ?? ""
+        guard !title.isEmpty else { return nil }
+        let date = entry.releaseDate ?? entry.firstAirDate
+        return MediaItem(
+            tmdbId: id,
+            mediaType: kind,
+            title: title,
+            overview: entry.overview ?? "",
+            posterURL: image(entry.posterPath, size: "w500"),
+            backdropURL: image(entry.backdropPath, size: "w1280"),
+            year: year(from: date),
+            rating: entry.voteAverage
+        )
     }
 
     static func fetchDetail(apiKey: String, item: MediaItem) async throws -> TitleDetail {
@@ -145,7 +161,8 @@ enum TMDBClient {
                     episodeNumber: episode.episodeNumber ?? 0,
                     name: episode.name ?? "Folge \(episode.episodeNumber ?? 0)",
                     overview: episode.overview ?? "",
-                    stillURL: image(episode.stillPath, size: "w300")
+                    stillURL: image(episode.stillPath, size: "w500"),
+                    runtime: episode.runtime
                 )
             }.filter { $0.episodeNumber > 0 }
         }
@@ -336,6 +353,20 @@ private struct SearchEntry: Decodable {
     }
 }
 
+private struct FindPayload: Decodable {
+    var movieResults: [TMDBEntry]
+    var tvResults: [TMDBEntry]
+    enum CodingKeys: String, CodingKey {
+        case movieResults = "movie_results"
+        case tvResults = "tv_results"
+    }
+}
+
+private struct ListPayload: Decodable {
+    var name: String?
+    var items: [SearchEntry]
+}
+
 private struct ExternalIDs: Decodable {
     var imdbId: String?
     enum CodingKeys: String, CodingKey { case imdbId = "imdb_id" }
@@ -351,9 +382,10 @@ private struct SeasonEpisode: Decodable {
     var name: String?
     var overview: String?
     var stillPath: String?
+    var runtime: Int?
 
     enum CodingKeys: String, CodingKey {
-        case name, overview
+        case name, overview, runtime
         case seasonNumber = "season_number"
         case episodeNumber = "episode_number"
         case stillPath = "still_path"
