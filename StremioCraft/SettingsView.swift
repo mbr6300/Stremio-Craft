@@ -125,6 +125,7 @@ struct SettingsView: View {
                 .font(.title2.weight(.semibold))
             content()
         }
+        .focusSection()
     }
 
     private func load() {
@@ -174,4 +175,5 @@ struct SettingsView: View {
         }
     }
 }
+
 

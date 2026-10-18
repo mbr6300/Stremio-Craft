@@ -41,7 +41,9 @@ struct DetailView: View {
                     episodeList
                 }
             }
-            .padding(48)
+            .padding(.horizontal, 80)
+            .padding(.top, 48)
+            .padding(.bottom, 200)
         }
         .background(backdrop)
         .task { await load() }
@@ -237,4 +239,5 @@ struct DetailView: View {
         }
     }
 }
+
 

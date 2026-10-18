@@ -83,10 +83,12 @@ struct EmptyHint: View {
         Text(text)
             .font(.body)
             .foregroundStyle(.secondary)
-            .frame(width: 520, alignment: .leading)
-            .padding(.vertical, 40)
+            .frame(width: 640, alignment: .leading)
+            .padding(.vertical, 24)
+            .focusable()
     }
 }
+
 
 
 

@@ -5,12 +5,13 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 48) {
+            VStack(alignment: .leading, spacing: 28) {
                 header
+                    .focusSection()
                 continueRow
                 favoritesRow
                 ForEach(model.rows) { row in
-                    shelf(title: row.title, message: row.message) {
+                    shelf(title: row.title) {
                         if row.items.isEmpty {
                             EmptyHint(text: row.message ?? "Keine Titel.")
                         } else {
@@ -27,8 +28,9 @@ struct HomeView: View {
                         .padding(.bottom, 40)
                 }
             }
-            .padding(.horizontal, 40)
-            .padding(.vertical, 36)
+            .padding(.horizontal, 80)
+            .padding(.top, 36)
+            .padding(.bottom, 200)
         }
         .background(Color.black)
         .task {
@@ -58,7 +60,7 @@ struct HomeView: View {
     }
 
     private var continueRow: some View {
-        shelf(title: "Weiterschauen", message: nil) {
+        shelf(title: "Weiterschauen") {
             if model.continueWatching.isEmpty {
                 EmptyHint(text: "Noch nichts angefangen. Starte einen Film oder eine Folge.")
             } else {
@@ -80,7 +82,7 @@ struct HomeView: View {
     }
 
     private var favoritesRow: some View {
-        shelf(title: "Favoriten", message: nil) {
+        shelf(title: "Favoriten") {
             if model.favorites.isEmpty {
                 EmptyHint(text: "Keine Favoriten. Auf der Detailseite hinzufügen.")
             } else {
@@ -109,26 +111,24 @@ struct HomeView: View {
         return entry.position / duration
     }
 
-    private func shelf<Content: View>(title: String, message: String?, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+    private func shelf<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.title2.weight(.semibold))
-            if let message, !message.isEmpty, model.rows.first(where: { $0.title == title })?.items.isEmpty == true {
-                EmptyView()
-            }
             content()
         }
+        .focusSection()
     }
 
     private func horizontal<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: 36) {
+            HStack(alignment: .top, spacing: 40) {
                 content()
             }
-            .padding(.vertical, 24)
-            .padding(.horizontal, 8)
+            .padding(.vertical, 28)
+            .padding(.trailing, 80)
         }
-        .scrollClipDisabled()
+        .focusSection()
     }
 }
 
@@ -152,20 +152,25 @@ struct SearchView: View {
                     }
                     .disabled(isSearching)
                 }
+                .focusSection()
                 if isSearching {
                     ProgressView("Suche…")
                 } else if results.isEmpty {
                     Text(message)
                         .foregroundStyle(.secondary)
+                        .focusable()
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 28)], alignment: .leading, spacing: 28) {
                         ForEach(results) { item in
                             MediaLink(item: item, subtitle: item.yearText, progress: nil)
                         }
                     }
+                    .focusSection()
                 }
             }
-            .padding(48)
+            .padding(.horizontal, 80)
+            .padding(.top, 48)
+            .padding(.bottom, 200)
         }
         .background(Color.black)
     }
@@ -189,4 +194,3 @@ struct SearchView: View {
         }
     }
 }
-
