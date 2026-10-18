@@ -9,6 +9,9 @@ struct DetailView: View {
     @State private var selectedSeason: Int?
     @State private var status: String?
     @State private var loadingEpisodes = false
+    /// Staffel der fokussierten Folge – die Reihe läuft über Staffelgrenzen hinweg weiter.
+    @State private var highlightedSeason: Int?
+    @State private var appendingSeason = false
     @State private var imdb: IMDbInfo?
 
     private var shown: MediaItem { detail?.media ?? item }
@@ -195,13 +198,14 @@ struct DetailView: View {
             HStack(spacing: 18) {
                 ForEach(seasons) { season in
                     Button {
-                        guard selectedSeason != season.seasonNumber else { return }
+                        guard (highlightedSeason ?? selectedSeason) != season.seasonNumber
+                                || episodes.first?.seasonNumber != season.seasonNumber else { return }
                         selectedSeason = season.seasonNumber
                         Task { await loadEpisodes(season.seasonNumber) }
                     } label: {
                         Text(season.name)
                     }
-                    .buttonStyle(PillButtonStyle(selected: selectedSeason == season.seasonNumber))
+                    .buttonStyle(PillButtonStyle(selected: (highlightedSeason ?? selectedSeason) == season.seasonNumber))
                 }
             }
             .padding(.horizontal, Theme.pagePadding)
@@ -225,10 +229,25 @@ struct DetailView: View {
                             ForEach(episodes) { episode in
                                 let watched = model.isWatched(episode, of: shown)
                                 NavigationLink(value: AppRoute.play(episodeRequest(episode))) {
-                                    EpisodeCard(episode: episode, progress: episodeProgress(episode), watched: watched)
+                                    EpisodeCard(
+                                        episode: episode,
+                                        progress: episodeProgress(episode),
+                                        watched: watched,
+                                        startsSeason: startsAppendedSeason(episode)
+                                    ) {
+                                        if highlightedSeason != episode.seasonNumber {
+                                            highlightedSeason = episode.seasonNumber
+                                        }
+                                    }
                                 }
                                 .buttonStyle(PosterButtonStyle())
                                 .id(episode.id)
+                                .onAppear {
+                                    // Am Ende der geladenen Folgen die nächste Staffel anhängen.
+                                    if episode.id == episodes.last?.id {
+                                        Task { await appendNextSeason() }
+                                    }
+                                }
                                 .contextMenu {
                                     if watched {
                                         Button {
@@ -339,11 +358,31 @@ struct DetailView: View {
         defer { loadingEpisodes = false }
         do {
             let loaded = try await TMDBClient.fetchEpisodes(apiKey: model.tmdbAPIKey, tmdbId: shown.tmdbId, season: season)
-            if selectedSeason == season { episodes = loaded }
+            if selectedSeason == season {
+                episodes = loaded
+                highlightedSeason = season
+            }
         } catch {
             episodes = []
             status = error.localizedDescription
         }
+    }
+
+    /// Hängt die nächste Staffel an, damit man mit → einfach über das Staffelende weiterblättert.
+    private func appendNextSeason() async {
+        guard !appendingSeason, model.hasTMDBKey, let last = episodes.last,
+              let next = (detail?.seasons ?? []).first(where: { $0.seasonNumber > last.seasonNumber }) else { return }
+        appendingSeason = true
+        defer { appendingSeason = false }
+        guard let loaded = try? await TMDBClient.fetchEpisodes(apiKey: model.tmdbAPIKey, tmdbId: shown.tmdbId, season: next.seasonNumber),
+              episodes.last?.id == last.id else { return } // Liste wurde inzwischen ersetzt
+        episodes += loaded
+    }
+
+    /// Erste Folge einer angehängten Staffel – bekommt eine „Staffel N“-Marke.
+    private func startsAppendedSeason(_ episode: EpisodeInfo) -> Bool {
+        guard episode.seasonNumber != episodes.first?.seasonNumber else { return false }
+        return episodes.first { $0.seasonNumber == episode.seasonNumber }?.id == episode.id
     }
 }
 
@@ -351,6 +390,8 @@ private struct EpisodeCard: View {
     var episode: EpisodeInfo
     var progress: Double?
     var watched = false
+    var startsSeason = false
+    var onFocus: () -> Void = {}
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
@@ -358,6 +399,19 @@ private struct EpisodeCard: View {
             PosterArtwork(url: episode.stillURL, size: Theme.stillSize, progress: progress, symbol: "tv", watched: watched)
                 // Gesehene Folgen leicht abdunkeln, im Fokus wieder voll.
                 .opacity(watched && !isFocused ? 0.6 : 1)
+                .overlay(alignment: .topLeading) {
+                    if startsSeason {
+                        Text("Staffel \(episode.seasonNumber)")
+                            .font(.system(size: 18, weight: .heavy))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(.black.opacity(0.75), in: Capsule())
+                            .padding(10)
+                    }
+                }
+                .onChange(of: isFocused) { _, focused in
+                    if focused { onFocus() }
+                }
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(episode.episodeNumber). \(episode.name)")
                     .font(.system(size: 22, weight: .semibold))
