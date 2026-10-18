@@ -8,7 +8,9 @@ import UIKit
 actor ImagePipeline {
     static let shared = ImagePipeline()
 
-    private let memory = NSCache<NSString, UIImage>()
+    /// `NSCache` ist threadsicher; `cached(_:)` liest bewusst synchron ohne Actor-Sprung,
+    /// damit bereits geladene Poster sofort ohne Platzhalter erscheinen.
+    private nonisolated(unsafe) let memory = NSCache<NSString, UIImage>()
     private var running: [String: Task<UIImage?, Never>] = [:]
     private let session: URLSession
 

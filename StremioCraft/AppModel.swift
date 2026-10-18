@@ -49,7 +49,8 @@ final class AppModel {
     @ObservationIgnored private var recommendationTask: Task<Void, Never>?
     @ObservationIgnored private var loadTask: Task<Void, Never>?
 
-    private static let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    /// Unveränderlich, daher ohne Main-Actor-Bindung – wird auch aus Hintergrund-Tasks geschrieben.
+    private nonisolated static let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("catalog-rows.json")
 
     var tmdbAPIKey: String {
