@@ -9,6 +9,7 @@ final class AppModel {
     private let favoriteKey = "favorites"
     private let watchedKey = "watched"
     private let lovedKey = "loved"
+    private let pendingInfuseKey = "pendingInfuse"
     private let tmdbKey = "tmdbAPIKey"
     private let countryKey = "discoverCountry"
     private let torrentioKey = "torrentioOptions"
@@ -53,7 +54,20 @@ final class AppModel {
     @ObservationIgnored private var progressBuckets: [String: [WatchProgress]] = [:]
     @ObservationIgnored private var loadedSignature = ""
     @ObservationIgnored private var loadGeneration = 0
-    @ObservationIgnored private var pendingInfuse: PlaybackRequest?
+    /// An Infuse übergebene Wiedergabe. Dauerhaft gespeichert: iPadOS beendet die App oft,
+    /// während Infuse läuft – der Rückruf mit der Position käme sonst ins Leere.
+    @ObservationIgnored private var pendingInfuse: PlaybackRequest? {
+        get {
+            defaults.data(forKey: pendingInfuseKey).flatMap { try? JSONDecoder().decode(PlaybackRequest.self, from: $0) }
+        }
+        set {
+            if let newValue, let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: pendingInfuseKey)
+            } else {
+                defaults.removeObject(forKey: pendingInfuseKey)
+            }
+        }
+    }
     @ObservationIgnored private var recommendationTask: Task<Void, Never>?
     @ObservationIgnored private var loadTask: Task<Void, Never>?
 
@@ -736,7 +750,14 @@ final class AppModel {
             deepLink = .provider(id)
             return
         case "infuse-success":
-            guard let request = pendingInfuse, let position = value("position").flatMap(Double.init) else { return }
+            // Position robust lesen (Punkt oder Komma); ohne zugeordnete Übergabe nichts speichern.
+            guard let request = pendingInfuse,
+                  let raw = value("position"),
+                  let position = Double(raw.replacingOccurrences(of: ",", with: ".")),
+                  position > 0 else {
+                pendingInfuse = nil
+                return
+            }
             saveProgress(
                 media: request.media,
                 position: position,

@@ -238,10 +238,11 @@ struct WatchProgress: Identifiable, Hashable, Codable {
         if let season, let episode {
             parts.append(String(format: "S%02dE%02d", season, episode))
         }
+        // Zeit vor dem Folgentitel, damit sie bei langen Titeln nicht abgeschnitten wird.
+        if upNext != true { parts.append(Self.clock(position)) }
         if let episodeTitle, !episodeTitle.isEmpty {
             parts.append(episodeTitle)
         }
-        if upNext != true { parts.append(Self.clock(position)) }
         return parts.joined(separator: " · ")
     }
 
@@ -284,7 +285,7 @@ struct FavoriteItem: Identifiable, Hashable, Codable {
     }
 }
 
-struct PlaybackRequest: Hashable {
+struct PlaybackRequest: Hashable, Codable {
     var media: MediaItem
     var season: Int?
     var episode: Int?
