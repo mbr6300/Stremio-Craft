@@ -23,6 +23,15 @@ final class HeroState {
     var item: MediaItem?
     /// Reihe, in der der Fokus gerade liegt; die Liste richtet sie oben aus.
     var shelfID: String?
+    /// Zählt jeden Fokuswechsel in den Regalen – Anlass, die Reihe erneut auszurichten.
+    var focusTick = 0
+
+    /// Von Postern und „Alle anzeigen“ aufgerufen, wenn sie den Fokus bekommen.
+    func report(item: MediaItem?, shelfID: String?) {
+        if let item, self.item?.id != item.id { self.item = item }
+        if let shelfID, self.shelfID != shelfID { self.shelfID = shelfID }
+        focusTick &+= 1
+    }
 }
 
 private struct ShelfIDKey: EnvironmentKey {
@@ -42,27 +51,25 @@ extension EnvironmentValues {
 struct ShelvesScroll<Content: View>: View {
     @ViewBuilder var content: Content
     @Environment(HeroState.self) private var hero
-    @State private var position: String?
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                content
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    content
+                }
+                .padding(.top, 6)
+                // Platz, damit auch die letzte Reihe nach oben rutschen kann.
+                .padding(.bottom, 520)
             }
-            .scrollTargetLayout()
-            .padding(.top, 6)
-            // Platz, damit auch die letzte Reihe nach oben rutschen kann.
-            .padding(.bottom, 520)
-        }
-        .scrollPosition(id: $position, anchor: .top)
-        // Kein automatisches Fokus-Scrollen: tvOS würde beim Wechsel innerhalb einer Reihe
-        // nachjustieren und die Reihe wieder nach unten schieben. Die Liste scrollt nur noch
-        // über `position` – immer so, dass die fokussierte Reihe oben steht.
-        .scrollDisabled(true)
-        .topFadeMask()
-        .onChange(of: hero.shelfID) { _, id in
-            guard let id, id != position else { return }
-            withAnimation(.easeInOut(duration: 0.3)) { position = id }
+            .topFadeMask()
+            // tvOS scrollt per Fokus selbst (nötig, damit weggescrollte Reihen oben erreichbar
+            // bleiben) und justiert dabei auch beim Wechsel innerhalb einer Reihe nach.
+            // Deshalb nach jedem Fokuswechsel die aktuelle Reihe wieder oben ausrichten.
+            .onChange(of: hero.focusTick) {
+                guard let id = hero.shelfID else { return }
+                withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
+            }
         }
     }
 }
@@ -275,6 +282,8 @@ struct SeeAllCard: View {
 
     private struct SeeAllLabel: View {
         @Environment(\.isFocused) private var isFocused
+        @Environment(\.shelfID) private var shelfID
+        @Environment(HeroState.self) private var hero: HeroState?
 
         var body: some View {
             VStack(spacing: 18) {
@@ -288,6 +297,9 @@ struct SeeAllCard: View {
             .background(isFocused ? Color.white : Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .scaleEffect(isFocused ? 1.1 : 1)
             .animation(.easeOut(duration: 0.18), value: isFocused)
+            .onChange(of: isFocused) { _, focused in
+                if focused { hero?.report(item: nil, shelfID: shelfID) }
+            }
         }
     }
 }
@@ -319,9 +331,7 @@ struct FocusReporter<Content: View>: View {
     var body: some View {
         content
             .onChange(of: isFocused) { _, focused in
-                guard focused, let hero else { return }
-                if hero.item?.id != item.id { hero.item = item }
-                if let shelfID, hero.shelfID != shelfID { hero.shelfID = shelfID }
+                if focused { hero?.report(item: item, shelfID: shelfID) }
             }
     }
 }
