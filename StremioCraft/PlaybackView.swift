@@ -30,10 +30,13 @@ struct PlaybackView: View {
                     )
                 }
             } else {
-                streamList
+                ZStack {
+                    BackdropLayer(url: request.media.backdropURL)
+                    streamList
+                }
             }
         }
-        .background(BackdropLayer(url: request.media.backdropURL))
+        .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             guard !didLoad else { return }
             didLoad = true
@@ -71,7 +74,9 @@ struct PlaybackView: View {
                 if let lastResolved, model.player == .infuse {
                     HStack(spacing: 20) {
                         Button("Erneut an Infuse") { openInfuse(lastResolved.url, stream: lastResolved.stream) }
+                            .buttonStyle(PillButtonStyle(prominent: true))
                         Button("Integrierter Player") { startBuiltIn(lastResolved.url) }
+                            .buttonStyle(PillButtonStyle())
                     }
                     .focusSection()
                 }

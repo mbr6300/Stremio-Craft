@@ -12,6 +12,14 @@ struct StremioCraftApp: App {
                 .tint(Theme.accent)
                 // x-callback von Infuse: stremiocraft://infuse-success?position=…
                 .onOpenURL { model.handleCallback($0) }
+                #if DEBUG
+                // Zum Testen ohne Fernbedienung: `simctl launch … -openURL stremiocraft://detail/movie/155`
+                .onAppear {
+                    if let link = UserDefaults.standard.string(forKey: "openURL"), let url = URL(string: link) {
+                        model.handleCallback(url)
+                    }
+                }
+                #endif
         }
     }
 }
@@ -22,7 +30,10 @@ struct RootView: View {
     var body: some View {
         TabView {
             Tab("Entdecken", systemImage: "sparkles.tv") {
-                NavigationTab { HomeView() }
+                NavigationTab(handlesDeepLinks: true) { HomeView() }
+            }
+            Tab("Kategorien", systemImage: "square.grid.2x2") {
+                NavigationTab { CategoriesView() }
             }
             Tab("Suche", systemImage: "magnifyingglass", role: .search) {
                 NavigationTab { SearchView() }
@@ -39,10 +50,14 @@ struct RootView: View {
 }
 
 private struct NavigationTab<Root: View>: View {
+    var handlesDeepLinks = false
     @ViewBuilder var root: Root
 
+    @Environment(AppModel.self) private var model
+    @State private var path = NavigationPath()
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             root
                 .navigationDestination(for: AppRoute.self) { route in
                     switch route {
@@ -52,8 +67,18 @@ private struct NavigationTab<Root: View>: View {
                         PlaybackView(request: request)
                     case .lists:
                         ListsView()
+                    case .genre(let selection):
+                        GenreView(selection: selection)
                     }
                 }
         }
+        .onAppear(perform: openDeepLink)
+        .onChange(of: model.deepLink) { openDeepLink() }
+    }
+
+    private func openDeepLink() {
+        guard handlesDeepLinks, let route = model.deepLink else { return }
+        model.deepLink = nil
+        path.append(route)
     }
 }

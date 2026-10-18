@@ -28,6 +28,41 @@ struct PosterButtonStyle: ButtonStyle {
     }
 }
 
+/// Knöpfe im Apple-TV-Stil: im Fokus weiss mit dunkler Schrift, sonst halbtransparent
+/// (bzw. in Akzentfarbe für die Hauptaktion). Unabhängig von der globalen Tint-Farbe lesbar.
+struct PillButtonStyle: ButtonStyle {
+    var prominent = false
+    var selected = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        PillBody(configuration: configuration, prominent: prominent, selected: selected)
+    }
+
+    private struct PillBody: View {
+        let configuration: ButtonStyleConfiguration
+        let prominent: Bool
+        let selected: Bool
+        @Environment(\.isFocused) private var isFocused
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 24, weight: .semibold))
+                .padding(.horizontal, 30)
+                .padding(.vertical, 16)
+                .foregroundStyle(isFocused ? Color.black : .white)
+                .background(background, in: Capsule())
+                .scaleEffect(isFocused ? (configuration.isPressed ? 1.02 : 1.08) : 1)
+                .animation(.easeOut(duration: 0.15), value: isFocused)
+        }
+
+        private var background: Color {
+            if isFocused { return .white }
+            if prominent || selected { return Theme.accent }
+            return .white.opacity(0.14)
+        }
+    }
+}
+
 struct PosterArtwork: View {
     var url: URL?
     var size: CGSize = Theme.posterSize

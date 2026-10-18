@@ -17,7 +17,7 @@ struct HomeView: View {
         }
         .environment(hero)
         .task(id: model.catalogSignature) {
-            await model.loadCatalogsIfNeeded()
+            model.loadCatalogsIfNeeded()
         }
     }
 }
@@ -84,13 +84,22 @@ private struct HeroInfo: View {
 
 private struct ShelvesList: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("homeFilter") private var filter: MediaFilter = .all
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(alignment: .leading, spacing: 8) {
-                ContinueShelf()
+                Picker("Anzeigen", selection: $filter) {
+                    ForEach(MediaFilter.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 560)
+                .padding(.horizontal, Theme.pagePadding)
+                .padding(.top, 24)
+                .focusSection()
+                ContinueShelf(filter: filter)
                 ForEach(model.rows) { row in
-                    CatalogShelf(row: row)
+                    CatalogShelf(row: row, filter: filter)
                 }
                 if model.rows.isEmpty {
                     EmptyHint(text: "Keine Reihen aktiv. In den Einstellungen unter „Listen & Reihen“ einschalten.")
@@ -114,21 +123,23 @@ private struct ShelvesList: View {
     }
 }
 
-private struct CatalogShelf: View, Equatable {
+private struct CatalogShelf: View {
     var row: CatalogRow
+    var filter: MediaFilter
 
     var body: some View {
-        if !row.items.isEmpty || row.isLoading {
-            Shelf(title: row.title, isLoading: row.isLoading && !row.items.isEmpty) {
-                if row.items.isEmpty {
+        let items = filter == .all ? row.items : row.items.filter(filter.matches)
+        if !items.isEmpty || (row.isLoading && row.items.isEmpty) {
+            Shelf(title: row.title, isLoading: row.isLoading && !items.isEmpty) {
+                if items.isEmpty {
                     PlaceholderShelfItems()
                 } else {
-                    ForEach(row.items) { item in
+                    ForEach(items) { item in
                         MediaLink(item: item)
                     }
                 }
             }
-        } else if let message = row.message {
+        } else if row.items.isEmpty, let message = row.message {
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.title)
                     .font(.system(size: 30, weight: .bold))
@@ -142,11 +153,13 @@ private struct CatalogShelf: View, Equatable {
 
 private struct ContinueShelf: View {
     @Environment(AppModel.self) private var model
+    var filter: MediaFilter
 
     var body: some View {
-        if !model.continueWatching.isEmpty {
+        let entries = model.continueWatching.filter { filter.matches($0.media) }
+        if !entries.isEmpty {
             Shelf(title: "Weiterschauen") {
-                ForEach(model.continueWatching) { entry in
+                ForEach(entries) { entry in
                     ContinueCard(entry: entry)
                 }
             }

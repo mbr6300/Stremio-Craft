@@ -232,6 +232,10 @@ struct ListsView: View {
     private func sourceText(_ source: CatalogSource) -> String {
         switch source {
         case .tmdbTrending: return "TMDB · Trend der Woche"
+        case .trending(let type): return type == "tv" ? "TMDB · Trend der Woche, Serien" : "TMDB · Trend der Woche, Filme"
+        case .favorites: return "Deine Favoriten"
+        case .newOnProviders: return "TMDB · Neue Titel auf Netflix, Disney+, Prime, HBO, Paramount+"
+        case .recommendations: return "TMDB-Empfehlungen zu deinen Favoriten"
         case .provider: return "TMDB · Streaming-Anbieter"
         case .url(let url): return url
         }

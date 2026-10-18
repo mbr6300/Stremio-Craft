@@ -36,13 +36,109 @@ enum TMDBClient {
         }
     }
 
-    static func fetchTrending(apiKey: String, country: String) async throws -> [MediaItem] {
-        let url = try makeURL("/trending/all/week", [
+    /// `type`: "all", "movie" oder "tv". Zwei Seiten, damit reine Film-/Serienreihen voll sind.
+    static func fetchTrending(apiKey: String, country: String, type: String = "all") async throws -> [MediaItem] {
+        var items: [MediaItem] = []
+        for page in 1...2 {
+            let url = try makeURL("/trending/\(type)/week", [
+                "api_key": apiKey,
+                "language": language(for: country),
+                "page": String(page)
+            ])
+            items += try await get(url) { (payload: TMDBPage) in
+                payload.results.compactMap { entry in
+                    switch type {
+                    case "movie": return parseMovie(entry)
+                    case "tv": return parseTV(entry)
+                    default: return entry.title != nil ? parseMovie(entry) : parseTV(entry)
+                    }
+                }
+            }
+        }
+        return items
+    }
+
+    /// Neu & im Trend auf allen bekannten Plattformen: Filme der letzten Monate bzw. Serien mit
+    /// neuen Folgen, per Flatrate im Land verfügbar, nach Popularität sortiert, Filme und Serien gemischt.
+    static func fetchNewOnProviders(apiKey: String, country: String) async throws -> [MediaItem] {
+        let ids = providers.flatMap { [$0.tmdbProviderId] + ($0.fallbackProviderId.map { [$0] } ?? []) }
+        let providerList = ids.map(String.init).joined(separator: "|")
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let today = Date()
+        let day: (Int) -> String = { formatter.string(from: today.addingTimeInterval(TimeInterval(-$0 * 86_400))) }
+        let common = [
+            "api_key": apiKey,
+            "language": language(for: country),
+            "watch_region": country,
+            "with_watch_providers": providerList,
+            "with_watch_monetization_types": "flatrate",
+            "sort_by": "popularity.desc"
+        ]
+        let movieURL = try makeURL("/discover/movie", common.merging([
+            "primary_release_date.gte": day(150),
+            "primary_release_date.lte": day(0),
+            "vote_count.gte": "10"
+        ]) { $1 })
+        let tvURL = try makeURL("/discover/tv", common.merging([
+            "air_date.gte": day(30),
+            "air_date.lte": day(0)
+        ]) { $1 })
+        async let movies = get(movieURL) { (page: TMDBPage) in page.results.compactMap(parseMovie) }
+        async let series = get(tvURL) { (page: TMDBPage) in page.results.compactMap(parseTV) }
+        let (movieItems, seriesItems) = try await (movies, series)
+        return interleave(movieItems, seriesItems)
+    }
+
+    /// Titel eines Genres, seitenweise. `type`: "movie" oder "tv".
+    static func fetchGenre(
+        apiKey: String,
+        country: String,
+        type: String,
+        genreId: Int,
+        sort: GenreSort,
+        page: Int
+    ) async throws -> (items: [MediaItem], totalPages: Int) {
+        let isTV = type == "tv"
+        var query = [
+            "api_key": apiKey,
+            "language": language(for: country),
+            "with_genres": String(genreId),
+            "page": String(page),
+            "include_adult": "false"
+        ]
+        switch sort {
+        case .popular:
+            query["sort_by"] = "popularity.desc"
+            query["vote_count.gte"] = "20"
+        case .topRated:
+            query["sort_by"] = "vote_average.desc"
+            query["vote_count.gte"] = isTV ? "200" : "500"
+        case .newest:
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            let today = formatter.string(from: Date())
+            query["sort_by"] = isTV ? "first_air_date.desc" : "primary_release_date.desc"
+            query[isTV ? "first_air_date.lte" : "primary_release_date.lte"] = today
+            query["vote_count.gte"] = "15"
+        }
+        let url = try makeURL(isTV ? "/discover/tv" : "/discover/movie", query)
+        return try await get(url) { (payload: TMDBPage) in
+            (payload.results.compactMap { isTV ? parseTV($0) : parseMovie($0) }, payload.totalPages ?? 1)
+        }
+    }
+
+    /// TMDB-Empfehlungen zu einem Titel.
+    static func fetchRecommendations(apiKey: String, tmdbId: Int, mediaType: String, country: String) async throws -> [MediaItem] {
+        let type = mediaType == "tv" ? "tv" : "movie"
+        let url = try makeURL("/\(type)/\(tmdbId)/recommendations", [
             "api_key": apiKey,
             "language": language(for: country)
         ])
-        return try await get(url) { (payload: MultiSearchPayload) in
-            payload.results.compactMap(parseAny)
+        return try await get(url) { (payload: TMDBPage) in
+            payload.results.compactMap { type == "tv" ? parseTV($0) : parseMovie($0) }
         }
     }
 
@@ -194,7 +290,7 @@ enum TMDBClient {
             movie: false
         )
         let (movieItems, seriesItems) = try await (movies, series)
-        return interleave(movieItems, seriesItems).prefix(24).map { $0 }
+        return interleave(movieItems, seriesItems)
     }
 
     private static func discover(
@@ -304,6 +400,12 @@ enum TMDBClient {
 
 private struct TMDBPage: Decodable {
     var results: [TMDBEntry]
+    var totalPages: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case results
+        case totalPages = "total_pages"
+    }
 }
 
 private struct TMDBEntry: Decodable {

@@ -16,7 +16,11 @@ struct SearchView: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                 } else if results.isEmpty {
-                    EmptyHint(text: message, symbol: "magnifyingglass")
+                    if trimmedQuery.isEmpty && !model.recentSearches.isEmpty {
+                        recentSearches
+                    } else {
+                        EmptyHint(text: message, symbol: "magnifyingglass")
+                    }
                 } else {
                     LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 56) {
                         ForEach(results) { item in
@@ -32,12 +36,51 @@ struct SearchView: View {
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
         .searchable(text: $query, prompt: "Film oder Serie")
+        .onSubmit(of: .search) { model.addRecentSearch(query) }
         .task(id: query) {
             // Entprellen: erst suchen, wenn kurz nicht getippt wird.
             try? await Task.sleep(nanoseconds: 450_000_000)
             guard !Task.isCancelled else { return }
             await search()
+            // Begriff merken, wenn er Treffer hatte und eine Weile stehen bleibt
+            // (live getippte Zwischenstände landen so nicht im Verlauf).
+            guard !results.isEmpty else { return }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard !Task.isCancelled else { return }
+            model.addRecentSearch(query)
         }
+    }
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var recentSearches: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 24) {
+                Text("Zuletzt gesucht")
+                    .font(.system(size: 30, weight: .bold))
+                Spacer()
+                Button("Verlauf löschen") { model.clearRecentSearches() }
+                    .buttonStyle(PillButtonStyle())
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 24)], alignment: .leading, spacing: 24) {
+                ForEach(model.recentSearches, id: \.self) { term in
+                    Button {
+                        query = term
+                    } label: {
+                        Label(term, systemImage: "clock.arrow.circlepath")
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(PillButtonStyle())
+                    .contextMenu {
+                        Button("Aus Verlauf entfernen", role: .destructive) { model.removeRecentSearch(term) }
+                    }
+                }
+            }
+        }
+        .focusSection()
     }
 
     private func search() async {

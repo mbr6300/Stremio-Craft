@@ -16,20 +16,26 @@ struct DetailView: View {
     private var isSeries: Bool { shown.normalizedType == "tv" }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 40) {
-                header
-                    .padding(.horizontal, Theme.pagePadding)
-                    .padding(.top, 220)
-                if isSeries {
-                    seasonBar
-                    episodeShelf
+        // Hintergrund fest hinter der ganzen Seite: als `.background` der ScrollView war er nur
+        // so breit wie deren Inhalt, daneben blieb ein grauer Balken.
+        ZStack {
+            BackdropLayer(url: shown.backdropURL)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 40) {
+                    header
+                        .padding(.horizontal, Theme.pagePadding)
+                        .padding(.top, 200)
+                    if isSeries {
+                        seasonBar
+                        episodeShelf
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 80)
             }
-            .padding(.bottom, 80)
+            .scrollClipDisabled()
         }
-        .scrollClipDisabled()
-        .background(BackdropLayer(url: shown.backdropURL))
+        .toolbarBackground(.hidden, for: .navigationBar)
         .task { await load() }
     }
 
@@ -97,28 +103,30 @@ struct DetailView: View {
             if let primary = primaryRequest {
                 NavigationLink(value: AppRoute.play(primary.request)) {
                     Label(primary.label, systemImage: "play.fill")
-                        .font(.system(size: 26, weight: .bold))
-                        .padding(.horizontal, 12)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle(prominent: true))
 
                 NavigationLink(value: AppRoute.play(withAutoStart(primary.request, false))) {
-                    Label("Streams", systemImage: "list.bullet")
+                    Label("Streams wählen", systemImage: "list.bullet")
                 }
+                .buttonStyle(PillButtonStyle())
             }
             if !isSeries, let saved, saved.position >= 15 {
                 NavigationLink(value: AppRoute.play(movieRequest(resume: 0))) {
                     Label("Von vorne", systemImage: "arrow.counterclockwise")
                 }
+                .buttonStyle(PillButtonStyle())
             }
             Button {
                 model.toggleFavorite(shown)
             } label: {
-                Image(systemName: model.isFavorite(shown) ? "heart.fill" : "heart")
-                    .foregroundStyle(model.isFavorite(shown) ? .red : .white)
+                Label(
+                    model.isFavorite(shown) ? "In meiner Liste" : "Meine Liste",
+                    systemImage: model.isFavorite(shown) ? "checkmark" : "plus"
+                )
             }
+            .buttonStyle(PillButtonStyle(selected: model.isFavorite(shown)))
         }
-        .font(.system(size: 24, weight: .semibold))
     }
 
     private var primaryRequest: (label: String, request: PlaybackRequest)? {
@@ -158,10 +166,8 @@ struct DetailView: View {
                         Task { await loadEpisodes(season.seasonNumber) }
                     } label: {
                         Text(season.name)
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(selectedSeason == season.seasonNumber ? Theme.accent : .white)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(PillButtonStyle(selected: selectedSeason == season.seasonNumber))
                 }
             }
             .padding(.horizontal, Theme.pagePadding)

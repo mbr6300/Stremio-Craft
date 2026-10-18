@@ -11,6 +11,8 @@ final class AppModel {
     private let countryKey = "discoverCountry"
     private let torrentioKey = "torrentioOptions"
     private let catalogsKey = "catalogEntries"
+    private let catalogsVersionKey = "catalogEntriesVersion"
+    private let recentSearchesKey = "recentSearches"
     private let playerKey = "playerChoice"
     private let autoPlayKey = "autoPlayBest"
 
@@ -26,11 +28,17 @@ final class AppModel {
     var hasRealDebridToken = false
     /// Rückmeldung von Infuse (x-callback), wird in der Wiedergabe-Ansicht angezeigt.
     var playbackNotice: String?
+    /// Von außen angeforderte Ansicht (Deep Link), wird vom Entdecken-Bereich geöffnet.
+    var deepLink: AppRoute?
+    /// Die letzten 10 Suchbegriffe, neuester zuerst.
+    var recentSearches: [String] = []
 
     @ObservationIgnored private var allProgress: [WatchProgress] = []
     @ObservationIgnored private var loadedSignature = ""
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var pendingInfuse: PlaybackRequest?
+    @ObservationIgnored private var recommendationTask: Task<Void, Never>?
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
 
     private static let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("catalog-rows.json")
@@ -52,12 +60,19 @@ final class AppModel {
         }
         if let data = defaults.data(forKey: catalogsKey),
            let stored = try? JSONDecoder().decode([CatalogEntry].self, from: data) {
-            catalogs = stored
+            if defaults.integer(forKey: catalogsVersionKey) < CatalogEntry.defaultsVersion {
+                catalogs = CatalogEntry.migrate(stored)
+                save(catalogs, key: catalogsKey)
+            } else {
+                catalogs = stored
+            }
         }
+        defaults.set(CatalogEntry.defaultsVersion, forKey: catalogsVersionKey)
         player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .infuse
         autoPlayBest = defaults.object(forKey: autoPlayKey) as? Bool ?? true
         allProgress = decodeList(WatchProgress.self, key: continueKey)
         favorites = decodeList(FavoriteItem.self, key: favoriteKey)
+        recentSearches = defaults.stringArray(forKey: recentSearchesKey) ?? []
         hasRealDebridToken = KeychainStore.loadToken() != nil
         refreshContinueWatching()
         rows = cachedRows()
@@ -65,9 +80,12 @@ final class AppModel {
 
     // MARK: - Kataloge
 
-    func loadCatalogsIfNeeded() async {
+    /// Startet das Laden in einer eigenen Task. Hinge es an der `.task` der Startseite, würde ein
+    /// Neuaufbau der Ansicht alle Anfragen abbrechen – und wegen der schon gesetzten Signatur nie wiederholen.
+    func loadCatalogsIfNeeded() {
         guard catalogSignature != loadedSignature else { return }
-        await loadCatalogs()
+        loadTask?.cancel()
+        loadTask = Task { await loadCatalogs() }
     }
 
     /// Ändert sich, wenn Region, Schlüssel oder die aktiven Reihen wechseln. Reihenfolge zählt nicht.
@@ -98,13 +116,16 @@ final class AppModel {
         }
         let key = tmdbAPIKey
         let region = country
+        let favoriteItems = favorites.map(\.media)
+        let personal = Set(entries.filter(\.isPersonal).map(\.id))
         loadedSignature = catalogSignature
 
         await withTaskGroup(of: (String, Result<[MediaItem], Error>).self) { group in
             for entry in entries {
                 group.addTask {
                     do {
-                        return (entry.id, .success(try await Self.fetchItems(entry, apiKey: key, country: region)))
+                        let items = try await Self.fetchItems(entry, apiKey: key, country: region, favorites: favoriteItems)
+                        return (entry.id, .success(items))
                     } catch {
                         return (entry.id, .failure(error))
                     }
@@ -117,7 +138,8 @@ final class AppModel {
                 switch result {
                 case .success(let items):
                     row.items = items
-                    row.message = items.isEmpty ? "Keine Titel gefunden." : nil
+                    // Leere persönliche Reihen einfach ausblenden statt Hinweis zeigen.
+                    row.message = items.isEmpty && !personal.contains(id) ? "Keine Titel gefunden." : nil
                 case .failure(let error):
                     // Ältere Inhalte behalten, Fehler nur zeigen, wenn nichts da ist.
                     row.message = row.items.isEmpty ? error.localizedDescription : nil
@@ -130,15 +152,80 @@ final class AppModel {
         }
     }
 
-    private nonisolated static func fetchItems(_ entry: CatalogEntry, apiKey: String, country: String) async throws -> [MediaItem] {
+    private nonisolated static func fetchItems(
+        _ entry: CatalogEntry,
+        apiKey: String,
+        country: String,
+        favorites: [MediaItem]
+    ) async throws -> [MediaItem] {
         switch entry.source {
         case .tmdbTrending:
             return try await TMDBClient.fetchTrending(apiKey: apiKey, country: country)
+        case .trending(let type):
+            return try await TMDBClient.fetchTrending(apiKey: apiKey, country: country, type: type)
+        case .favorites:
+            return favorites
+        case .newOnProviders:
+            return try await TMDBClient.fetchNewOnProviders(apiKey: apiKey, country: country)
+        case .recommendations:
+            return await recommendations(for: favorites, apiKey: apiKey, country: country)
         case .provider(let id):
             guard let provider = TMDBClient.providers.first(where: { $0.id == id }) else { return [] }
             return try await TMDBClient.fetchProviderRow(apiKey: apiKey, provider: provider, country: country)
         case .url(let url):
             return try await ListClient.load(url, apiKey: apiKey, country: country).items
+        }
+    }
+
+    /// Empfehlungen zu den neuesten Favoriten, abwechselnd gemischt, ohne Doppelte und ohne die Favoriten selbst.
+    private nonisolated static func recommendations(for favorites: [MediaItem], apiKey: String, country: String) async -> [MediaItem] {
+        let seeds = Array(favorites.prefix(8))
+        guard !seeds.isEmpty else { return [] }
+        let lists = await withTaskGroup(of: (Int, [MediaItem]).self) { group in
+            for (index, seed) in seeds.enumerated() {
+                group.addTask {
+                    let items = (try? await TMDBClient.fetchRecommendations(
+                        apiKey: apiKey, tmdbId: seed.tmdbId, mediaType: seed.normalizedType, country: country
+                    )) ?? []
+                    return (index, items)
+                }
+            }
+            var result = Array(repeating: [MediaItem](), count: seeds.count)
+            for await (index, items) in group { result[index] = items }
+            return result
+        }
+        var seen = Set(favorites.map(\.id))
+        var merged: [MediaItem] = []
+        let depth = lists.map(\.count).max() ?? 0
+        for position in 0..<depth {
+            for list in lists where position < list.count {
+                let item = list[position]
+                if seen.insert(item.id).inserted { merged.append(item) }
+            }
+        }
+        return Array(merged.prefix(60))
+    }
+
+    /// Favoriten-Reihe sofort aktualisieren, Empfehlungen kurz danach neu berechnen.
+    private func refreshPersonalRows() {
+        let favoriteRows = Set(catalogs.filter { $0.source == .favorites }.map(\.id))
+        for index in rows.indices where favoriteRows.contains(rows[index].id) {
+            rows[index].items = favorites.map(\.media)
+            rows[index].isLoading = false
+        }
+        recommendationTask?.cancel()
+        guard let entry = catalogs.first(where: { $0.enabled && $0.source == .recommendations }), hasTMDBKey else { return }
+        let key = tmdbAPIKey
+        let region = country
+        let seeds = favorites.map(\.media)
+        recommendationTask = Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            let items = await Self.recommendations(for: seeds, apiKey: key, country: region)
+            guard !Task.isCancelled, let index = rows.firstIndex(where: { $0.id == entry.id }) else { return }
+            rows[index].items = items
+            rows[index].isLoading = false
+            storeRows()
         }
     }
 
@@ -200,7 +287,8 @@ final class AppModel {
         let stored = (try? Data(contentsOf: Self.cacheURL))
             .flatMap { try? JSONDecoder().decode([String: [MediaItem]].self, from: $0) } ?? [:]
         return catalogs.filter(\.enabled).map {
-            CatalogRow(id: $0.id, title: $0.title, items: stored[$0.id] ?? [], isLoading: true)
+            let items = $0.source == .favorites ? favorites.map(\.media) : stored[$0.id] ?? []
+            return CatalogRow(id: $0.id, title: $0.title, items: items, isLoading: $0.source != .favorites)
         }
     }
 
@@ -211,6 +299,29 @@ final class AppModel {
                 try? data.write(to: Self.cacheURL, options: .atomic)
             }
         }
+    }
+
+    // MARK: - Suchverlauf
+
+    func addRecentSearch(_ query: String) {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard term.count >= 2 else { return }
+        var next = recentSearches.filter { $0.caseInsensitiveCompare(term) != .orderedSame }
+        next.insert(term, at: 0)
+        next = Array(next.prefix(10))
+        guard next != recentSearches else { return }
+        recentSearches = next
+        defaults.set(next, forKey: recentSearchesKey)
+    }
+
+    func removeRecentSearch(_ term: String) {
+        recentSearches.removeAll { $0 == term }
+        defaults.set(recentSearches, forKey: recentSearchesKey)
+    }
+
+    func clearRecentSearches() {
+        recentSearches = []
+        defaults.removeObject(forKey: recentSearchesKey)
     }
 
     // MARK: - Favoriten & Fortschritt
@@ -230,10 +341,14 @@ final class AppModel {
                 title: item.title,
                 overview: item.overview,
                 posterURL: item.posterURL,
-                year: item.year
+                year: item.year,
+                backdropURL: item.backdropURL,
+                rating: item.rating,
+                imdbId: item.imdbId
             ), at: 0)
         }
         save(favorites, key: favoriteKey)
+        refreshPersonalRows()
     }
 
     func progress(for item: MediaItem) -> WatchProgress? {
@@ -293,6 +408,19 @@ final class AppModel {
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let value: (String) -> String? = { name in items.first { $0.name == name }?.value }
         switch url.host {
+        case "detail":
+            // stremiocraft://detail/movie/155 bzw. stremiocraft://detail/tv/1396
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count == 2, ["movie", "tv"].contains(parts[0]), let id = Int(parts[1]) else { return }
+            deepLink = .detail(MediaItem(tmdbId: id, mediaType: parts[0], title: "", overview: ""))
+            return
+        case "genre":
+            // stremiocraft://genre/movie/35
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count == 2, let id = Int(parts[1]),
+                  let genre = (parts[0] == "tv" ? Genre.series : Genre.movie).first(where: { $0.id == id }) else { return }
+            deepLink = .genre(GenreSelection(genre: genre, type: parts[0] == "tv" ? "tv" : "movie"))
+            return
         case "infuse-success":
             guard let request = pendingInfuse, let position = value("position").flatMap(Double.init) else { return }
             saveProgress(

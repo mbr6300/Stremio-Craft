@@ -75,19 +75,75 @@ struct CatalogEntry: Codable, Identifiable, Hashable {
         return true
     }
 
+    /// Reihen aus den eigenen Favoriten; leer werden sie ausgeblendet.
+    var isPersonal: Bool { source == .favorites || source == .recommendations }
+
+    /// Erhöhen, wenn neue Standardreihen dazukommen; bestehende Einstellungen werden dann ergänzt.
+    static let defaultsVersion = 3
+
     static let defaults: [CatalogEntry] = [
-        CatalogEntry(id: "trending", title: "Im Trend", source: .tmdbTrending),
-        CatalogEntry(id: "imdb-top", title: "IMDb Top 250", source: .url("https://www.imdb.com/chart/top/"))
+        CatalogEntry(id: "favorites", title: "Meine Liste", source: .favorites),
+        CatalogEntry(id: "recommended", title: "Empfohlen für dich", source: .recommendations),
+        CatalogEntry(id: "new-on-providers", title: "Neu & im Trend auf deinen Plattformen", source: .newOnProviders),
+        CatalogEntry(id: "trending-movies", title: "Im Trend · Filme", source: .trending("movie")),
+        CatalogEntry(id: "trending-series", title: "Im Trend · Serien", source: .trending("tv")),
+        CatalogEntry(id: "imdb-top", title: "IMDb Top 250 · Filme", source: .url("https://www.imdb.com/chart/top/")),
+        CatalogEntry(id: "imdb-top-tv", title: "IMDb Top 250 · Serien", source: .url("https://www.imdb.com/chart/toptv/")),
+        CatalogEntry(id: "imdb-popular-movies", title: "Beliebt auf IMDb · Filme", source: .url("https://www.imdb.com/chart/moviemeter/")),
+        CatalogEntry(id: "imdb-popular-series", title: "Beliebt auf IMDb · Serien", source: .url("https://www.imdb.com/chart/tvmeter/"))
     ] + TMDBClient.providers.map {
         CatalogEntry(id: $0.id, title: $0.name, source: .provider($0.id))
+    }
+
+    /// Ergänzt neue Standardreihen an ihrer Standardposition, ohne eigene Reihenfolge,
+    /// Sichtbarkeit oder eigene Listen anzutasten.
+    static func migrate(_ stored: [CatalogEntry]) -> [CatalogEntry] {
+        // v1 hatte eine gemischte Trend-Reihe; sie wird durch Filme/Serien ersetzt.
+        var result = stored.filter { $0.id != "trending" }
+        let renamed = ["imdb-top": ("IMDb Top 250", "IMDb Top 250 · Filme")]
+        for index in result.indices {
+            if let (old, new) = renamed[result[index].id], result[index].title == old {
+                result[index].title = new
+            }
+        }
+        for (position, entry) in defaults.enumerated() where !result.contains(where: { $0.id == entry.id }) {
+            result.insert(entry, at: min(position, result.count))
+        }
+        return result
     }
 }
 
 enum CatalogSource: Codable, Hashable {
+    /// Gemischter TMDB-Trend (nur noch für alte Einstellungen).
     case tmdbTrending
+    /// TMDB-Trend der Woche für "movie" oder "tv".
+    case trending(String)
     case provider(String)
+    /// Die eigenen Favoriten.
+    case favorites
+    /// TMDB-Empfehlungen auf Basis der Favoriten.
+    case recommendations
+    /// Neue, populäre Titel quer über alle Streaming-Anbieter.
+    case newOnProviders
     /// IMDb-Liste/-Chart, MDBList, TMDB-Liste, Stremio-Addon-Katalog oder beliebige Seite mit IMDb-IDs.
     case url(String)
+}
+
+/// Filter der Startseite.
+enum MediaFilter: String, CaseIterable, Identifiable {
+    case all, movie, tv
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all: return "Alle"
+        case .movie: return "Filme"
+        case .tv: return "Serien"
+        }
+    }
+
+    func matches(_ item: MediaItem) -> Bool {
+        self == .all || item.normalizedType == rawValue
+    }
 }
 
 enum PlayerChoice: String, Codable, CaseIterable, Identifiable {
@@ -163,6 +219,9 @@ struct FavoriteItem: Identifiable, Hashable, Codable {
     var overview: String
     var posterURL: URL?
     var year: Int?
+    var backdropURL: URL?
+    var rating: Double?
+    var imdbId: String?
     var id: String { "\(mediaType)-\(tmdbId)" }
 
     var media: MediaItem {
@@ -172,9 +231,10 @@ struct FavoriteItem: Identifiable, Hashable, Codable {
             title: title,
             overview: overview,
             posterURL: posterURL,
-            backdropURL: nil,
+            backdropURL: backdropURL,
             year: year,
-            rating: nil
+            rating: rating,
+            imdbId: imdbId
         )
     }
 }
@@ -199,6 +259,7 @@ enum AppRoute: Hashable {
     case detail(MediaItem)
     case play(PlaybackRequest)
     case lists
+    case genre(GenreSelection)
 }
 
 struct CatalogRow: Identifiable, Equatable {
