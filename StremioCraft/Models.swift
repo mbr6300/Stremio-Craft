@@ -37,7 +37,17 @@ struct EpisodeInfo: Identifiable, Hashable {
     var overview: String
     var stillURL: URL?
     var runtime: Int?
+    /// Ausstrahlung ("yyyy-MM-dd"); in der Zukunft = noch nicht verfügbar.
+    var airDate: String?
     var id: String { "\(seasonNumber)-\(episodeNumber)" }
+
+    var isAired: Bool {
+        guard let airDate, airDate.count >= 10 else { return true }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return airDate <= formatter.string(from: Date())
+    }
     var label: String { String(format: "S%02dE%02d", seasonNumber, episodeNumber) }
 }
 
@@ -197,6 +207,8 @@ struct WatchProgress: Identifiable, Hashable, Codable {
     var episode: Int?
     var episodeTitle: String?
     var updatedAt: Date
+    /// Serie: vorherige Folge fertig, diese ist die nächste (noch nicht begonnen).
+    var upNext: Bool?
 
     var id: String { "stream:\(tmdbId):\(mediaType == "tv" ? "tv" : "movie")" }
 
@@ -214,6 +226,7 @@ struct WatchProgress: Identifiable, Hashable, Codable {
     }
 
     var isActive: Bool {
+        if upNext == true { return true }
         guard position >= 15 else { return false }
         guard let duration, duration > 0 else { return true }
         return position < duration * 0.92
@@ -221,13 +234,14 @@ struct WatchProgress: Identifiable, Hashable, Codable {
 
     var subtitle: String {
         var parts: [String] = []
+        if upNext == true { parts.append("Als Nächstes") }
         if let season, let episode {
             parts.append(String(format: "S%02dE%02d", season, episode))
         }
         if let episodeTitle, !episodeTitle.isEmpty {
             parts.append(episodeTitle)
         }
-        parts.append(Self.clock(position))
+        if upNext != true { parts.append(Self.clock(position)) }
         return parts.joined(separator: " · ")
     }
 

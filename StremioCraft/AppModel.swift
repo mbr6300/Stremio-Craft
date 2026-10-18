@@ -602,15 +602,67 @@ final class AppModel {
         if entry.isActive {
             list.append(entry)
         }
-        // Fast ganz geschaut → automatisch als gesehen markieren.
+        // Fast ganz geschaut → automatisch als gesehen markieren; bei Serien die nächste Folge vormerken.
         if let duration, duration > 0, position >= duration * 0.92 {
             let key = media.normalizedType == "tv"
                 ? season.flatMap { s in episode.map { Self.episodeKey(media.tmdbId, s, $0) } }
                 : Self.movieKey(media.tmdbId)
             if let key { setWatched([key], true) }
+            if media.normalizedType == "tv", let season, let episode {
+                Task { await queueNextEpisode(after: media, season: season, episode: episode) }
+            }
         }
         progressBuckets[bucket] = list
         save(list, key: bucketKey(continueKey, activeProfileID))
+        refreshContinueWatching()
+    }
+
+    /// Trägt nach einer fertigen Folge die nächste noch nicht gesehene und bereits ausgestrahlte
+    /// Folge als „Als Nächstes“ in „Weiterschauen“ ein – auch über das Staffelende hinweg.
+    func queueNextEpisode(after media: MediaItem, season: Int, episode: Int) async {
+        guard hasTMDBKey else { return }
+        let key = tmdbAPIKey
+        let profile = activeProfileID // Profil kann während des Ladens wechseln
+        guard let detail = try? await TMDBClient.fetchDetail(apiKey: key, item: media) else { return }
+        let seasons = detail.seasons.map(\.seasonNumber).filter { $0 >= season }.sorted()
+        var next: EpisodeInfo?
+        for number in seasons {
+            guard let episodes = try? await TMDBClient.fetchEpisodes(apiKey: key, tmdbId: media.tmdbId, season: number) else { break }
+            let candidates = episodes.filter { number > season || $0.episodeNumber > episode }
+            guard let first = candidates.first else { continue }
+            if !first.isAired { break } // noch nicht ausgestrahlt: nichts vormerken
+            if let unwatched = candidates.first(where: { $0.isAired && !watched.contains(Self.episodeKey(media.tmdbId, number, $0.episodeNumber)) }) {
+                next = unwatched
+                break
+            }
+        }
+        guard let next else { return }
+        let bucket = bucketName(profile)
+        var list = progressBuckets[bucket] ?? []
+        // Hat inzwischen jemand eine neuere Folge der Serie begonnen, nichts überschreiben.
+        if let current = list.first(where: { $0.tmdbId == media.tmdbId && $0.mediaType == "tv" }),
+           current.upNext != true,
+           (current.season ?? 0, current.episode ?? 0) >= (next.seasonNumber, next.episodeNumber) {
+            return
+        }
+        list.removeAll { $0.tmdbId == media.tmdbId && $0.mediaType == "tv" }
+        list.append(WatchProgress(
+            tmdbId: media.tmdbId,
+            mediaType: "tv",
+            title: detail.media.title,
+            overview: detail.media.overview,
+            posterURL: detail.media.posterURL ?? media.posterURL,
+            year: detail.media.year,
+            position: 0,
+            duration: next.runtime.map { Double($0 * 60) },
+            season: next.seasonNumber,
+            episode: next.episodeNumber,
+            episodeTitle: next.name,
+            updatedAt: Date(),
+            upNext: true
+        ))
+        progressBuckets[bucket] = list
+        save(list, key: bucketKey(continueKey, profile))
         refreshContinueWatching()
     }
 
@@ -656,6 +708,15 @@ final class AppModel {
             switchProfile(to: id == "all" ? nil : profiles.first { $0.id == id }?.id)
             selectedTab = .home
             return
+        #if DEBUG
+        case "finish":
+            // Test: stremiocraft://finish/<tmdbId>/<staffel>/<folge> simuliert „Folge fertig geschaut“.
+            let parts = url.pathComponents.filter { $0 != "/" }.compactMap(Int.init)
+            guard parts.count == 3 else { return }
+            let series = MediaItem(tmdbId: parts[0], mediaType: "tv", title: "", overview: "")
+            saveProgress(media: series, position: 2900, duration: 3000, season: parts[1], episode: parts[2], episodeTitle: nil)
+            return
+        #endif
         case "lists":
             // stremiocraft://lists
             deepLink = .lists

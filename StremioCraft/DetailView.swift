@@ -198,8 +198,14 @@ struct DetailView: View {
                 }
             }
         }
+        let inContinueWatching = model.progress(for: shown) != nil
         model.setWatched(keys, true)
         model.clearProgressIfWatched(shown)
+        // Läuft die Serie gerade, gleich die nächste Folge vormerken.
+        if inContinueWatching {
+            let series = shown
+            Task { await model.queueNextEpisode(after: series, season: episode.seasonNumber, episode: episode.episodeNumber) }
+        }
     }
 
     // MARK: - Staffeln & Folgen

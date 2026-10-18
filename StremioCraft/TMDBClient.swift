@@ -266,7 +266,8 @@ enum TMDBClient {
                     name: episode.name ?? "Folge \(episode.episodeNumber ?? 0)",
                     overview: episode.overview ?? "",
                     stillURL: image(episode.stillPath, size: "w500"),
-                    runtime: episode.runtime
+                    runtime: episode.runtime,
+                    airDate: episode.airDate
                 )
             }.filter { $0.episodeNumber > 0 }
         }
@@ -520,9 +521,11 @@ private struct SeasonEpisode: Decodable {
     var overview: String?
     var stillPath: String?
     var runtime: Int?
+    var airDate: String?
 
     enum CodingKeys: String, CodingKey {
         case name, overview, runtime
+        case airDate = "air_date"
         case seasonNumber = "season_number"
         case episodeNumber = "episode_number"
         case stillPath = "still_path"
