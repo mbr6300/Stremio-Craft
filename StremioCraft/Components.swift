@@ -53,6 +53,10 @@ struct ShelvesScroll<Content: View>: View {
             .padding(.bottom, 520)
         }
         .scrollPosition(id: $position, anchor: .top)
+        // Kein automatisches Fokus-Scrollen: tvOS würde beim Wechsel innerhalb einer Reihe
+        // nachjustieren und die Reihe wieder nach unten schieben. Die Liste scrollt nur noch
+        // über `position` – immer so, dass die fokussierte Reihe oben steht.
+        .scrollDisabled(true)
         .topFadeMask()
         .onChange(of: hero.shelfID) { _, id in
             guard let id, id != position else { return }
