@@ -304,6 +304,7 @@ struct ProviderView: View {
                     }
                     .frame(height: 185, alignment: .bottomLeading)
                     .padding(.horizontal, Theme.pagePadding)
+                    .padding(.bottom, Theme.headerGap)
                     ShelvesScroll {
                         ForEach(brand.sections, id: \.title) { query in
                             DiscoverShelf(query: query)

@@ -26,6 +26,7 @@ struct HomeView: View {
                 }
                 .frame(height: 165, alignment: .bottom)
                 .padding(.horizontal, Theme.pagePadding)
+                .padding(.bottom, Theme.headerGap)
                 ShelvesList()
             }
         }

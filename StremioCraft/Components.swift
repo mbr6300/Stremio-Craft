@@ -9,6 +9,8 @@ enum Theme {
     static let posterSize = CGSize(width: 200, height: 300)
     static let stillSize = CGSize(width: 384, height: 216)
     static let pagePadding: CGFloat = 80
+    /// Abstand zwischen Kopfbereich (Titel/Beschreibung) und den Regalen darunter.
+    static let headerGap: CGFloat = 22
 }
 
 /// Zuletzt fokussierter Titel. Nur der Hero-Bereich beobachtet ihn, die Regale nicht –
@@ -46,7 +48,7 @@ struct ShelvesScroll<Content: View>: View {
                 content
             }
             .scrollTargetLayout()
-            .padding(.top, 20)
+            .padding(.top, 6)
             // Platz, damit auch die letzte Reihe nach oben rutschen kann.
             .padding(.bottom, 520)
         }
@@ -258,7 +260,7 @@ extension View {
         mask {
             VStack(spacing: 0) {
                 LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 28)
+                    .frame(height: 14)
                 Color.black
             }
             .padding(.horizontal, -400)
@@ -318,6 +320,8 @@ struct Shelf<Content: View>: View {
             }
             .scrollClipDisabled()
         }
+        // Luft über dem Titel, damit er auch oben ausgerichtet nicht in der Ausblendkante liegt.
+        .padding(.top, 14)
         .focusSection()
         .environment(\.shelfID, shelfID)
     }
