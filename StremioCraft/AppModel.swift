@@ -7,6 +7,7 @@ final class AppModel {
     @ObservationIgnored private let defaults = UserDefaults.standard
     private let continueKey = "continueWatching"
     private let favoriteKey = "favorites"
+    private let watchedKey = "watched"
     private let tmdbKey = "tmdbAPIKey"
     private let countryKey = "discoverCountry"
     private let torrentioKey = "torrentioOptions"
@@ -42,6 +43,9 @@ final class AppModel {
 
     /// Favoriten und Fortschritt je Profil; Schlüssel "" steht für „Alle“.
     @ObservationIgnored private var favoriteBuckets: [String: [FavoriteItem]] = [:]
+    @ObservationIgnored private var watchedBuckets: [String: Set<String>] = [:]
+    /// Gesehene Filme ("movie-<id>") und Folgen ("tv-<id>-<staffel>-<folge>") des aktiven Profils.
+    var watched: Set<String> = []
     @ObservationIgnored private var progressBuckets: [String: [WatchProgress]] = [:]
     @ObservationIgnored private var loadedSignature = ""
     @ObservationIgnored private var loadGeneration = 0
@@ -355,11 +359,12 @@ final class AppModel {
     func deleteProfile(_ profile: Profile) {
         profiles.removeAll { $0.id == profile.id }
         save(profiles, key: profilesKey)
-        for base in [favoriteKey, continueKey, recentSearchesKey] {
+        for base in [favoriteKey, continueKey, recentSearchesKey, watchedKey] {
             defaults.removeObject(forKey: bucketKey(base, profile.id))
         }
         favoriteBuckets[profile.id] = nil
         progressBuckets[profile.id] = nil
+        watchedBuckets[profile.id] = nil
         if activeProfileID == profile.id {
             activeProfileID = nil
             defaults.removeObject(forKey: activeProfileKey)
@@ -382,9 +387,11 @@ final class AppModel {
         for id in bucketIDs where favoriteBuckets[bucketName(id)] == nil {
             favoriteBuckets[bucketName(id)] = decodeList(FavoriteItem.self, key: bucketKey(favoriteKey, id))
             progressBuckets[bucketName(id)] = decodeList(WatchProgress.self, key: bucketKey(continueKey, id))
+            watchedBuckets[bucketName(id)] = Set(defaults.stringArray(forKey: bucketKey(watchedKey, id)) ?? [])
         }
         refreshFavorites()
         refreshContinueWatching()
+        refreshWatched()
         recentSearches = defaults.stringArray(forKey: bucketKey(recentSearchesKey, activeProfileID)) ?? []
     }
 
@@ -407,6 +414,51 @@ final class AppModel {
             .sorted { $0.updatedAt > $1.updatedAt }
             .filter { seen.insert($0.id).inserted }
         if next != continueWatching { continueWatching = next }
+    }
+
+    // MARK: - Gesehen
+
+    static func movieKey(_ tmdbId: Int) -> String { "movie-\(tmdbId)" }
+    static func episodeKey(_ tmdbId: Int, _ season: Int, _ episode: Int) -> String { "tv-\(tmdbId)-\(season)-\(episode)" }
+
+    /// Nur Filme; Serien werden pro Folge markiert.
+    func isWatched(_ item: MediaItem) -> Bool {
+        item.normalizedType == "movie" && watched.contains(Self.movieKey(item.tmdbId))
+    }
+
+    func isWatched(_ episode: EpisodeInfo, of series: MediaItem) -> Bool {
+        watched.contains(Self.episodeKey(series.tmdbId, episode.seasonNumber, episode.episodeNumber))
+    }
+
+    /// Markieren landet im aktiven Profil (bzw. bei „Alle“ im gemeinsamen Bereich);
+    /// Entfernen bei „Alle“ entfernt aus allen Profilen – wie bei Meine Liste.
+    func setWatched(_ keys: [String], _ value: Bool) {
+        let targets: [String?] = value ? [activeProfileID] : (activeProfileID.map { [$0] } ?? bucketIDs)
+        for id in targets {
+            var set = watchedBuckets[bucketName(id)] ?? []
+            if value { set.formUnion(keys) } else { set.subtract(keys) }
+            watchedBuckets[bucketName(id)] = set
+            defaults.set(Array(set), forKey: bucketKey(watchedKey, id))
+        }
+        refreshWatched()
+    }
+
+    /// Gesehenes aus „Weiterschauen“ nehmen (z. B. nach manuellem Markieren).
+    func clearProgressIfWatched(_ media: MediaItem) {
+        guard let entry = progress(for: media) else { return }
+        let done: Bool
+        if let season = entry.season, let episode = entry.episode {
+            done = watched.contains(Self.episodeKey(media.tmdbId, season, episode))
+        } else {
+            done = media.normalizedType == "movie" && watched.contains(Self.movieKey(media.tmdbId))
+        }
+        if done { removeProgress(entry) }
+    }
+
+    private func refreshWatched() {
+        let next = activeProfileID.map { watchedBuckets[$0] ?? [] }
+            ?? bucketIDs.reduce(into: Set<String>()) { $0.formUnion(watchedBuckets[bucketName($1)] ?? []) }
+        if next != watched { watched = next }
     }
 
     // MARK: - Suchverlauf
@@ -499,6 +551,13 @@ final class AppModel {
         list.removeAll { $0.id == entry.id }
         if entry.isActive {
             list.append(entry)
+        }
+        // Fast ganz geschaut → automatisch als gesehen markieren.
+        if let duration, duration > 0, position >= duration * 0.92 {
+            let key = media.normalizedType == "tv"
+                ? season.flatMap { s in episode.map { Self.episodeKey(media.tmdbId, s, $0) } }
+                : Self.movieKey(media.tmdbId)
+            if let key { setWatched([key], true) }
         }
         progressBuckets[bucket] = list
         save(list, key: bucketKey(continueKey, activeProfileID))

@@ -116,6 +116,7 @@ struct PosterArtwork: View {
     var size: CGSize = Theme.posterSize
     var progress: Double?
     var symbol = "film"
+    var watched = false
 
     @Environment(\.isFocused) private var isFocused
 
@@ -123,10 +124,13 @@ struct PosterArtwork: View {
         RemoteImage(url: url, maxPoints: max(size.width, size.height) * 1.1, placeholderSymbol: symbol)
             .frame(width: size.width, height: size.height)
             .overlay(alignment: .bottom) {
-                if let progress, progress > 0 {
+                if let progress, progress > 0, !watched {
                     ProgressBar(value: progress)
                         .padding(10)
                 }
+            }
+            .overlay(alignment: .topTrailing) {
+                if watched { WatchedBadge().padding(10) }
             }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
@@ -156,17 +160,35 @@ struct ProgressBar: View {
     }
 }
 
+/// Kennzeichnung „gesehen“ auf Postern und Folgenbildern.
+struct WatchedBadge: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 16, weight: .black))
+            Text("Gesehen")
+                .font(.system(size: 16, weight: .bold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Theme.accent, in: Capsule())
+        .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+    }
+}
+
 struct PosterCard: View {
     var title: String
     var subtitle: String?
     var posterURL: URL?
     var progress: Double?
+    var watched = false
 
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PosterArtwork(url: posterURL, progress: progress)
+            PosterArtwork(url: posterURL, progress: progress, watched: watched)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 22, weight: .semibold))
@@ -203,12 +225,23 @@ struct MediaLink: View {
                     title: item.title,
                     subtitle: subtitle ?? item.yearText,
                     posterURL: item.posterURL,
-                    progress: progress
+                    progress: progress,
+                    watched: model.isWatched(item)
                 )
             }
         }
         .buttonStyle(PosterButtonStyle())
         .contextMenu {
+            if item.normalizedType == "movie" {
+                let watched = model.isWatched(item)
+                Button {
+                    model.setWatched([AppModel.movieKey(item.tmdbId)], !watched)
+                    if !watched { model.clearProgressIfWatched(item) }
+                } label: {
+                    Label(watched ? "Als ungesehen markieren" : "Als gesehen markieren",
+                          systemImage: watched ? "eye.slash" : "checkmark.circle")
+                }
+            }
             if let listRoute {
                 // NavigationLink im Kontextmenü ist auf tvOS unzuverlässig; daher über den Deep-Link-Weg.
                 Button {

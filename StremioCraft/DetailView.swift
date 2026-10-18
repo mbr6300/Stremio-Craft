@@ -126,6 +126,16 @@ struct DetailView: View {
                 )
             }
             .buttonStyle(PillButtonStyle(selected: model.isFavorite(shown)))
+            if !isSeries {
+                let watched = model.isWatched(shown)
+                Button {
+                    model.setWatched([AppModel.movieKey(shown.tmdbId)], !watched)
+                    if !watched { model.clearProgressIfWatched(shown) }
+                } label: {
+                    Label(watched ? "Gesehen" : "Als gesehen markieren", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle")
+                }
+                .buttonStyle(PillButtonStyle(selected: watched))
+            }
         }
     }
 
@@ -149,8 +159,32 @@ struct DetailView: View {
             )
             return ("Fortsetzen · \(String(format: "S%02dE%02d", season, episode))", request)
         }
-        guard let first = episodes.first else { return nil }
-        return ("Abspielen · \(first.label)", episodeRequest(first))
+        // Ohne laufenden Fortschritt: erste noch ungesehene Folge der Staffel.
+        guard let next = episodes.first(where: { !model.isWatched($0, of: shown) }) ?? episodes.first else { return nil }
+        return ("Abspielen · \(next.label)", episodeRequest(next))
+    }
+
+    // MARK: - Gesehen
+
+    private func episodeKey(_ episode: EpisodeInfo) -> String {
+        AppModel.episodeKey(shown.tmdbId, episode.seasonNumber, episode.episodeNumber)
+    }
+
+    /// Markiert die Folge – auf Wunsch auch alle früheren Staffeln und Folgen bis hierhin.
+    private func markWatched(upTo episode: EpisodeInfo, includingPrevious: Bool) {
+        var keys = [episodeKey(episode)]
+        if includingPrevious {
+            for number in 1..<max(episode.episodeNumber, 1) {
+                keys.append(AppModel.episodeKey(shown.tmdbId, episode.seasonNumber, number))
+            }
+            for season in detail?.seasons ?? [] where season.seasonNumber < episode.seasonNumber {
+                for number in stride(from: 1, through: season.episodeCount, by: 1) {
+                    keys.append(AppModel.episodeKey(shown.tmdbId, season.seasonNumber, number))
+                }
+            }
+        }
+        model.setWatched(keys, true)
+        model.clearProgressIfWatched(shown)
     }
 
     // MARK: - Staffeln & Folgen
@@ -189,11 +223,34 @@ struct DetailView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(alignment: .top, spacing: 40) {
                             ForEach(episodes) { episode in
+                                let watched = model.isWatched(episode, of: shown)
                                 NavigationLink(value: AppRoute.play(episodeRequest(episode))) {
-                                    EpisodeCard(episode: episode, progress: episodeProgress(episode))
+                                    EpisodeCard(episode: episode, progress: episodeProgress(episode), watched: watched)
                                 }
                                 .buttonStyle(PosterButtonStyle())
                                 .id(episode.id)
+                                .contextMenu {
+                                    if watched {
+                                        Button {
+                                            model.setWatched([episodeKey(episode)], false)
+                                        } label: {
+                                            Label("Als ungesehen markieren", systemImage: "eye.slash")
+                                        }
+                                    } else {
+                                        Section("Als gesehen markieren") {
+                                            Button {
+                                                markWatched(upTo: episode, includingPrevious: false)
+                                            } label: {
+                                                Label("Nur diese Folge", systemImage: "checkmark.circle")
+                                            }
+                                            Button {
+                                                markWatched(upTo: episode, includingPrevious: true)
+                                            } label: {
+                                                Label("Diese und alle vorherigen", systemImage: "checkmark.circle.fill")
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal, Theme.pagePadding)
@@ -293,11 +350,14 @@ struct DetailView: View {
 private struct EpisodeCard: View {
     var episode: EpisodeInfo
     var progress: Double?
+    var watched = false
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            PosterArtwork(url: episode.stillURL, size: Theme.stillSize, progress: progress, symbol: "tv")
+            PosterArtwork(url: episode.stillURL, size: Theme.stillSize, progress: progress, symbol: "tv", watched: watched)
+                // Gesehene Folgen leicht abdunkeln, im Fokus wieder voll.
+                .opacity(watched && !isFocused ? 0.6 : 1)
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(episode.episodeNumber). \(episode.name)")
                     .font(.system(size: 22, weight: .semibold))
