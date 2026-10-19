@@ -39,6 +39,9 @@ final class AppModel {
     var playbackNotice: String?
     /// Von außen angeforderte Ansicht (Deep Link), wird vom Entdecken-Bereich geöffnet.
     var deepLink: AppRoute?
+    /// Vom integrierten Player gesetzt, wenn er geschlossen wurde; der Navigationsstapel mit dieser
+    /// Wiedergabe zeigt dann die Detailseite statt der Streamliste.
+    var finishedPlayback: MediaItem?
     /// Die letzten 10 Suchbegriffe des aktiven Profils, neuester zuerst.
     var recentSearches: [String] = []
     var profiles: [Profile] = []

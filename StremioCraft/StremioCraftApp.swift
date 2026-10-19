@@ -105,25 +105,10 @@ private struct OpenRouteKey: EnvironmentKey {
     static let defaultValue = OpenRouteAction { _ in }
 }
 
-/// Nach dem Schliessen des Players: Streamliste verlassen und die Detailseite des Titels zeigen.
-struct FinishPlaybackAction {
-    var action: (MediaItem) -> Void
-    func callAsFunction(_ media: MediaItem) { action(media) }
-}
-
-private struct FinishPlaybackKey: EnvironmentKey {
-    static let defaultValue = FinishPlaybackAction { _ in }
-}
-
 extension EnvironmentValues {
     var openRoute: OpenRouteAction {
         get { self[OpenRouteKey.self] }
         set { self[OpenRouteKey.self] = newValue }
-    }
-
-    var finishPlayback: FinishPlaybackAction {
-        get { self[FinishPlaybackKey.self] }
-        set { self[FinishPlaybackKey.self] = newValue }
     }
 }
 
@@ -156,15 +141,22 @@ private struct NavigationTab<Root: View>: View {
         }
         // Öffnet Ansichten im Stapel *dieses* Bereichs (z. B. aus Kontextmenüs, wo NavigationLink unzuverlässig ist).
         .environment(\.openRoute, OpenRouteAction { path.append($0) })
-        .environment(\.finishPlayback, FinishPlaybackAction { media in
-            if case .play = path.last { path.removeLast() }
-            // Kam die Wiedergabe von der Detailseite, genügt das Zurückgehen; sonst (z. B. aus
-            // „Weiterschauen“) die Detailseite öffnen.
-            if case .detail(let shown)? = path.last, shown.id == media.id { return }
-            path.append(.detail(media))
-        })
         .onAppear(perform: openDeepLink)
         .onChange(of: model.deepLink) { openDeepLink() }
+        .onChange(of: model.finishedPlayback) { showDetailAfterPlayback() }
+    }
+
+    /// Nach dem Schliessen des Players die Streamliste durch die Detailseite ersetzen.
+    /// Über das Modell statt per Environment: auf tvOS kam die Aktion in der Wiedergabe nicht an.
+    private func showDetailAfterPlayback() {
+        guard let media = model.finishedPlayback,
+              case .play(let request)? = path.last, request.media.id == media.id else { return }
+        model.finishedPlayback = nil
+        path.removeLast()
+        // Kam die Wiedergabe von der Detailseite, genügt das Zurückgehen; sonst (z. B. aus
+        // „Weiterschauen“) die Detailseite öffnen.
+        if case .detail(let shown)? = path.last, shown.id == media.id { return }
+        path.append(.detail(media))
     }
 
     private func openDeepLink() {

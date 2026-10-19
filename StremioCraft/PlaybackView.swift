@@ -5,7 +5,6 @@ import UIKit
 
 struct PlaybackView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.finishPlayback) private var finishPlayback
     var request: PlaybackRequest
 
     @State private var streams: [StreamCandidate] = []
@@ -27,9 +26,9 @@ struct PlaybackView: View {
                 set: { presented in
                     guard !presented, playerURL != nil else { return }
                     playerURL = nil
-                    // Nach dem Schauen zur Detailseite statt zurück in die Streamliste. Direkt beim
-                    // Schliessen, nicht erst in `onDismiss` – das ruft tvOS bei der Menü-Taste nicht auf.
-                    finishPlayback(request.media)
+                    // Nach dem Schauen zur Detailseite statt zurück in die Streamliste
+                    // (der Navigationsstapel reagiert darauf, siehe `NavigationTab`).
+                    model.finishedPlayback = request.media
                 }
             )) {
                 if let playerURL {
