@@ -20,6 +20,10 @@ final class AppModel {
     private let autoPlayKey = "autoPlayBest"
     private let profilesKey = "profiles"
     private let activeProfileKey = "activeProfile"
+    private let zoomKey = "uiZoom"
+
+    /// Darstellungsgrösse auf iPad und Mac (siehe `Zoom`).
+    private(set) var zoom: Double = Zoom.standard
 
     var country: String
     var tmdbKeyOverride: String
@@ -102,6 +106,8 @@ final class AppModel {
         defaults.set(CatalogEntry.defaultsVersion, forKey: catalogsVersionKey)
         player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .platformDefault
         autoPlayBest = defaults.object(forKey: autoPlayKey) as? Bool ?? true
+        zoom = defaults.object(forKey: zoomKey) as? Double ?? Zoom.standard
+        Theme.zoom = zoom
         profiles = decodeList(Profile.self, key: profilesKey)
         activeProfileID = defaults.string(forKey: activeProfileKey).flatMap { id in
             profiles.contains { $0.id == id } ? id : nil
@@ -792,6 +798,22 @@ final class AppModel {
         guard code != country else { return }
         country = code
         defaults.set(code, forKey: countryKey)
+    }
+
+    /// Setzt die Darstellungsgrösse; die Oberfläche wird dadurch neu aufgebaut.
+    func setZoom(_ value: Double) {
+        let clamped = min(max(value, Zoom.steps.first!), Zoom.steps.last!)
+        guard clamped != zoom else { return }
+        Theme.zoom = clamped
+        zoom = clamped
+        defaults.set(clamped, forKey: zoomKey)
+    }
+
+    /// Eine Stufe grösser (+1) oder kleiner (−1).
+    func stepZoom(_ direction: Int) {
+        let index = Zoom.steps.firstIndex { $0 >= zoom - 0.001 } ?? Zoom.steps.count - 1
+        let next = min(max(index + direction, 0), Zoom.steps.count - 1)
+        setZoom(Zoom.steps[next])
     }
 
     func savePlayer(_ choice: PlayerChoice, autoPlay: Bool) {

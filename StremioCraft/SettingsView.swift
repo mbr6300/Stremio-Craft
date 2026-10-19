@@ -24,6 +24,9 @@ struct SettingsView: View {
                 Picker("Region", selection: $country) {
                     ForEach(Region.all) { Text("\($0.flag)  \($0.name)").tag($0.id) }
                 }
+                if !Platform.isTV {
+                    zoomControl
+                }
             }
 
             Section {
@@ -99,6 +102,28 @@ struct SettingsView: View {
         .onChange(of: player) { model.savePlayer(player, autoPlay: autoPlay) }
         .onChange(of: autoPlay) { model.savePlayer(player, autoPlay: autoPlay) }
         .onSubmit(saveOptions)
+    }
+
+    /// Grösse der Poster und Texte: mehr oder weniger Titel pro Reihe (iPad/Mac).
+    private var zoomControl: some View {
+        LabeledContent {
+            HStack(spacing: 12) {
+                Button { model.stepZoom(-1) } label: { Image(systemName: "minus.magnifyingglass") }
+                    .disabled(model.zoom <= Zoom.steps.first!)
+                Text(Zoom.label(model.zoom))
+                    .monospacedDigit()
+                    .frame(minWidth: 52)
+                Button { model.stepZoom(1) } label: { Image(systemName: "plus.magnifyingglass") }
+                    .disabled(model.zoom >= Zoom.steps.last!)
+                if model.zoom != Zoom.standard {
+                    Button("Standard") { model.setZoom(Zoom.standard) }
+                }
+            }
+            .buttonStyle(.borderless)
+        } label: {
+            Text("Darstellungsgrösse")
+            Text(Platform.isMac ? "Auch mit ⌘+ und ⌘− im Menü „Darstellung“." : "Kleiner zeigt mehr Titel pro Reihe.")
+        }
     }
 
     private var currentOptions: TorrentioOptions {

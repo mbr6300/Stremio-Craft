@@ -21,6 +21,19 @@ struct StremioCraftApp: App {
                 }
                 #endif
         }
+        #if !os(tvOS)
+        .commands {
+            // Mac-Menü „Darstellung“ bzw. Tastenkürzel auf dem iPad.
+            CommandGroup(after: .toolbar) {
+                Button("Grösser") { model.stepZoom(1) }
+                    .keyboardShortcut("+")
+                Button("Kleiner") { model.stepZoom(-1) }
+                    .keyboardShortcut("-")
+                Button("Standardgrösse") { model.setZoom(Zoom.standard) }
+                    .keyboardShortcut("0")
+            }
+        }
+        #endif
     }
 }
 
@@ -49,7 +62,9 @@ struct RootView: View {
         .background(LongPressLeftDetector { quickMenu = true })
         #else
         // iPad: Tab-Leiste bzw. Seitenleiste des Systems, kein Fernbedienungs-Schnellmenü nötig.
+        // Neuaufbau bei geänderter Darstellungsgrösse, da die Masse statisch berechnet werden.
         tabs
+            .id(model.zoom)
         #endif
     }
 

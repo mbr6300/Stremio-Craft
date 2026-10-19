@@ -7,19 +7,34 @@ enum Theme {
     static let background = Color(red: 0.035, green: 0.05, blue: 0.11)
     static let surface = Color.white.opacity(0.07)
 
-    /// Masse sind für den Fernseher (1920 pt breit) entworfen; auf dem iPad werden sie verkleinert.
-    static let scale: CGFloat = Platform.isTV ? 1 : 0.62
+    /// Masse sind für den Fernseher (1920 pt breit) entworfen; auf iPad und Mac werden sie verkleinert.
+    private static let baseScale: CGFloat = Platform.isTV ? 1 : 0.62
+
+    /// Einstellbare Darstellungsgrösse auf iPad und Mac (1 = Standard des iPads).
+    /// Wird nur vom `AppModel` gesetzt; die Oberfläche wird danach neu aufgebaut.
+    nonisolated(unsafe) static var zoom: CGFloat = 1
+
+    static var scale: CGFloat { Platform.isTV ? 1 : baseScale * zoom }
 
     /// Skaliert ein TV-Mass für die aktuelle Plattform (auf tvOS unverändert).
     static func s(_ value: CGFloat) -> CGFloat { (value * scale).rounded() }
 
-    static let posterSize = CGSize(width: s(200), height: s(300))
-    static let stillSize = CGSize(width: s(352), height: s(198))
-    static let pagePadding: CGFloat = Platform.isTV ? 80 : 24
+    static var posterSize: CGSize { CGSize(width: s(200), height: s(300)) }
+    static var stillSize: CGSize { CGSize(width: s(352), height: s(198)) }
+    static var pagePadding: CGFloat { Platform.isTV ? 80 : s(38) }
     /// Abstand zwischen Kopfbereich (Titel/Beschreibung) und den Regalen darunter.
-    static let headerGap: CGFloat = s(22)
+    static var headerGap: CGFloat { s(22) }
     /// Innenhöhe der Pills oben rechts (Region, Profil), damit beide gleich hoch sind.
-    static let pillContentHeight: CGFloat = s(34)
+    static var pillContentHeight: CGFloat { s(34) }
+}
+
+/// Stufen der Darstellungsgrösse (iPad/Mac).
+enum Zoom {
+    static let steps: [Double] = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.45, 1.6]
+    /// Das Mac-Fenster ist breiter als ein iPad, daher dort grösser.
+    static var standard: Double { Platform.isMac ? 1.3 : 1.0 }
+
+    static func label(_ value: Double) -> String { "\(Int((value * 100).rounded())) %" }
 }
 
 /// Zuletzt fokussierter Titel. Nur der Hero-Bereich beobachtet ihn, die Regale nicht –

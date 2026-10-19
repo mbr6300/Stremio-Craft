@@ -1,6 +1,6 @@
 import SwiftUI
 
-private let gridColumns = [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: Theme.s(44))]
+private var gridColumns: [GridItem] { [GridItem(.adaptive(minimum: Theme.posterSize.width, maximum: Theme.posterSize.width + 20), spacing: Theme.s(44))] }
 
 struct SearchView: View {
     @Environment(AppModel.self) private var model
