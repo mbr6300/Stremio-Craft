@@ -24,11 +24,14 @@ struct PlaybackView: View {
         content(showsPlayer: false)
             .fullScreenCover(isPresented: Binding(
                 get: { playerURL != nil },
-                set: { if !$0 { playerURL = nil } }
-            ), onDismiss: {
-                // Nach dem Schauen zur Detailseite statt zurück in die Streamliste.
-                finishPlayback(request.media)
-            }) {
+                set: { presented in
+                    guard !presented, playerURL != nil else { return }
+                    playerURL = nil
+                    // Nach dem Schauen zur Detailseite statt zurück in die Streamliste. Direkt beim
+                    // Schliessen, nicht erst in `onDismiss` – das ruft tvOS bei der Menü-Taste nicht auf.
+                    finishPlayback(request.media)
+                }
+            )) {
                 if let playerURL {
                     KSPlayerScreen(url: playerURL, title: playerTitle, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
                 }
