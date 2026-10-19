@@ -2,8 +2,9 @@
 //  TrackDisplayName.swift
 //  KSPlayer – Ergänzung für Stremio Craft
 //
-//  Lesbare Namen für das Tonspur-Menü: zuerst die Sprache, dann das Tonformat
-//  (z. B. „Deutsch · Dolby TrueHD Atmos · 7.1“) statt der technischen Beschreibung.
+//  Lesbare Namen für Ton- und Untertitel-Menüs: zuerst die Sprache, dann die Art
+//  (z. B. „Deutsch · Dolby TrueHD Atmos · 7.1“ oder „Englisch · Für Hörgeschädigte“)
+//  statt Sprachkürzeln und technischer Beschreibung.
 //
 
 import FFmpegKit
@@ -13,22 +14,45 @@ import Libavformat
 public extension MediaPlayerTrack {
     /// Bezeichnung für Auswahlmenüs; fällt für Nicht-FFmpeg-Spuren auf `description` zurück.
     var menuTitle: String {
-        (self as? FFmpegAssetTrack)?.readableAudioTitle ?? description
+        guard let track = self as? FFmpegAssetTrack else { return description }
+        return track.mediaType == .subtitle ? track.readableSubtitleTitle : track.readableAudioTitle
     }
+}
+
+/// Bezeichnung einer Untertitel-Quelle (eingebettet oder extern) für das Menü.
+public func subtitleMenuTitle(_ info: any SubtitleInfo) -> String {
+    (info as? FFmpegAssetTrack)?.readableSubtitleTitle ?? info.name
 }
 
 extension FFmpegAssetTrack {
     var readableAudioTitle: String {
         guard mediaType == .audio else { return name }
-        var parts = [languageName ?? "Unbekannte Sprache", formatTitle]
+        var parts = [languageName ?? metadataTitle ?? "Unbekannte Sprache", formatTitle]
         if let channels = channelTitle { parts.append(channels) }
         if let purpose = purposeTitle { parts.append(purpose) }
         return parts.joined(separator: " · ")
     }
 
+    var readableSubtitleTitle: String {
+        var parts = [languageName ?? metadataTitle ?? "Unbekannte Sprache"]
+        let title = metadataTitle?.lowercased() ?? ""
+        func mentions(_ words: String...) -> Bool { words.contains { title.contains($0) } }
+        if isForced || mentions("forced", "erzwungen", "foreign") {
+            parts.append("Nur fremdsprachige Stellen")
+        } else if mentions("signs", "songs", "schilder") {
+            parts.append("Nur Schilder & Lieder")
+        }
+        if isHearingImpaired || mentions("sdh", "hearing", "hörgeschädigt", "gehörlos") || title.split(separator: " ").contains("cc") {
+            parts.append("Für Hörgeschädigte")
+        }
+        if mentions("comment", "kommentar") { parts.append("Kommentar") }
+        return parts.joined(separator: " · ")
+    }
+
     /// Titel aus den Metadaten der Datei (z. B. „German DTS-HD MA 5.1“), falls vorhanden.
     private var metadataTitle: String? {
-        name.isEmpty || name == languageCode || name == codecName ? nil : name
+        guard let title, !title.isEmpty, title != languageCode, title != codecName else { return nil }
+        return title
     }
 
     private var languageName: String? {

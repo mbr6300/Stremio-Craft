@@ -39,6 +39,15 @@ enum KSVideoPlayerViewBuilder {
     }
 
     @MainActor
+    /// Gleichlautende Einträge werden durchnummeriert, damit sie unterscheidbar bleiben.
+    private static func uniqueSubtitleTitle(_ info: any SubtitleInfo, in infos: [any SubtitleInfo]) -> String {
+        let title = subtitleMenuTitle(info)
+        let duplicates = infos.filter { subtitleMenuTitle($0) == title }
+        guard duplicates.count > 1 else { return title }
+        let index = (duplicates.firstIndex { $0.subtitleID == info.subtitleID } ?? 0) + 1
+        return "\(title) (\(index))"
+    }
+
     static func subtitleButton(config: KSVideoPlayer.Coordinator) -> some View {
         MenuView(selection: Binding {
             config.subtitleModel.selectedSubtitleInfo?.subtitleID
@@ -50,9 +59,10 @@ enum KSVideoPlayerViewBuilder {
                 config.playerLayer?.player.select(track: info)
             }
         }) {
-            Text("Off").tag(nil as String?)
-            ForEach(config.subtitleModel.subtitleInfos, id: \.subtitleID) { track in
-                Text(track.name).tag(track.subtitleID as String?)
+            Text("Aus").tag(nil as String?)
+            let infos = config.subtitleModel.subtitleInfos
+            ForEach(infos, id: \.subtitleID) { track in
+                Text(uniqueSubtitleTitle(track, in: infos)).tag(track.subtitleID as String?)
             }
         } label: {
             Image(systemName: "text.bubble.fill")

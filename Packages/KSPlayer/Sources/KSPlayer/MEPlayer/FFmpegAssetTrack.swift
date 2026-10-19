@@ -14,6 +14,10 @@ public class FFmpegAssetTrack: MediaPlayerTrack {
     public let codecName: String
     public var name: String = ""
     public private(set) var languageCode: String?
+    /// Titel aus den Metadaten der Datei, falls vorhanden.
+    public private(set) var title: String?
+    public private(set) var isForced = false
+    public private(set) var isHearingImpaired = false
     public var nominalFrameRate: Float = 0
     public private(set) var avgFrameRate = Timebase.defaultValue
     public private(set) var realFrameRate = Timebase.defaultValue
@@ -109,6 +113,7 @@ public class FFmpegAssetTrack: MediaPlayerTrack {
             languageCode = nil
         }
         if let value = metadata["title"] {
+            title = value
             name = value
         } else {
             name = languageCode ?? codecName
@@ -116,7 +121,9 @@ public class FFmpegAssetTrack: MediaPlayerTrack {
         // AV_DISPOSITION_DEFAULT
         if mediaType == .subtitle {
             isEnabled = !isImageSubtitle || stream.pointee.disposition & AV_DISPOSITION_FORCED == AV_DISPOSITION_FORCED
-            if stream.pointee.disposition & AV_DISPOSITION_HEARING_IMPAIRED == AV_DISPOSITION_HEARING_IMPAIRED {
+            isForced = stream.pointee.disposition & AV_DISPOSITION_FORCED == AV_DISPOSITION_FORCED
+            isHearingImpaired = stream.pointee.disposition & AV_DISPOSITION_HEARING_IMPAIRED == AV_DISPOSITION_HEARING_IMPAIRED
+            if isHearingImpaired {
                 name += "(hearing impaired)"
             }
         }
