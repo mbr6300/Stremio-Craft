@@ -36,7 +36,15 @@ enum KeychainStore {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else {
             #if targetEnvironment(macCatalyst)
-            return FileTokenStore.load()
+            // Token aus der Ersatzdatei in den Schlüsselbund übernehmen, sobald dieser verfügbar ist.
+            guard let token = FileTokenStore.load() else { return nil }
+            var insert = baseQuery
+            insert[kSecValueData as String] = Data(token.utf8)
+            insert[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            if SecItemAdd(insert as CFDictionary, nil) == errSecSuccess {
+                FileTokenStore.delete()
+            }
+            return token
             #else
             return nil
             #endif

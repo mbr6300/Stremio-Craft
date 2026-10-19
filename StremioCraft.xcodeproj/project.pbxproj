@@ -171,7 +171,7 @@
 				"CODE_SIGNING_ALLOWED[sdk=appletvos*]" = YES;
 				"CODE_SIGNING_ALLOWED[sdk=iphoneos*]" = YES;
 				"CODE_SIGNING_ALLOWED[sdk=macosx*]" = YES;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = StremioCraftMac.entitlements;
 				CODE_SIGNING_REQUIRED = NO;
 				"CODE_SIGNING_REQUIRED[sdk=appletvos*]" = YES;
 				"CODE_SIGNING_REQUIRED[sdk=iphoneos*]" = YES;
@@ -222,7 +222,7 @@
 				"CODE_SIGNING_ALLOWED[sdk=appletvos*]" = YES;
 				"CODE_SIGNING_ALLOWED[sdk=iphoneos*]" = YES;
 				"CODE_SIGNING_ALLOWED[sdk=macosx*]" = YES;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = StremioCraftMac.entitlements;
 				CODE_SIGNING_REQUIRED = NO;
 				"CODE_SIGNING_REQUIRED[sdk=appletvos*]" = YES;
 				"CODE_SIGNING_REQUIRED[sdk=iphoneos*]" = YES;
