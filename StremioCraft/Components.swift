@@ -282,7 +282,7 @@ struct MediaLink: View {
     var item: MediaItem
     var subtitle: String?
     var progress: Double?
-    /// Ziel für „Ganze Liste anzeigen“ im Kontextmenü (gedrückt halten).
+    /// Ziel für „Ganzes …-Angebot / Ganze Liste … anzeigen“ im Kontextmenü (gedrückt halten).
     var listRoute: AppRoute?
 
     @Environment(AppModel.self) private var model
@@ -324,7 +324,7 @@ struct MediaLink: View {
                 Button {
                     openRoute(listRoute)
                 } label: {
-                    Label("Ganze Liste anzeigen", systemImage: "square.grid.3x3")
+                    Label(listRoute.seeAllTitle(catalogs: model.catalogs), systemImage: "square.grid.3x3")
                 }
             }
             Button {
@@ -345,12 +345,14 @@ struct SeeAllCard: View {
 
     var body: some View {
         NavigationLink(value: route) {
-            SeeAllLabel()
+            SeeAllLabel(route: route)
         }
         .buttonStyle(PosterButtonStyle())
     }
 
     private struct SeeAllLabel: View {
+        var route: AppRoute
+        @Environment(AppModel.self) private var model
         @Environment(\.isFocused) private var isFocused
         @Environment(\.shelfID) private var shelfID
         @Environment(HeroState.self) private var hero: HeroState?
@@ -359,8 +361,12 @@ struct SeeAllCard: View {
             VStack(spacing: Theme.s(18)) {
                 Image(systemName: "square.grid.3x3.fill")
                     .font(.system(size: Theme.s(46)))
-                Text("Alle anzeigen")
+                Text(route.seeAllTitle(catalogs: model.catalogs))
                     .font(.system(size: Theme.s(24), weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                    .minimumScaleFactor(0.7)
+                    .padding(.horizontal, Theme.s(14))
             }
             .foregroundStyle(isFocused ? Color.black : .white)
             .frame(width: Theme.posterSize.width, height: Theme.posterSize.height)

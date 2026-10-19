@@ -317,6 +317,28 @@ enum AppRoute: Hashable {
     case row(String)
 }
 
+extension AppRoute {
+    /// Beschriftung für „alles anzeigen“: bei Plattformen deren Name, sonst der Name der Liste.
+    func seeAllTitle(catalogs: [CatalogEntry]) -> String {
+        switch self {
+        case .provider(let id):
+            return providerTitle(id) ?? "Alle anzeigen"
+        case .row(let id):
+            guard let entry = catalogs.first(where: { $0.id == id }) else { return "Alle anzeigen" }
+            if case .provider(let providerId) = entry.source, let title = providerTitle(providerId) { return title }
+            return "Ganze Liste „\(entry.title)“ anzeigen"
+        case .discover(let query):
+            return "Ganze Liste „\(query.title)“ anzeigen"
+        default:
+            return "Alle anzeigen"
+        }
+    }
+
+    private func providerTitle(_ id: String) -> String? {
+        TMDBClient.providers.first { $0.id == id }.map { "Ganzes \($0.name)-Angebot anzeigen" }
+    }
+}
+
 struct CatalogRow: Identifiable, Equatable {
     var id: String
     var title: String
