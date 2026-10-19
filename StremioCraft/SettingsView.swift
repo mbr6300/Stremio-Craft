@@ -37,7 +37,9 @@ struct SettingsView: View {
             } header: {
                 Text("Wiedergabe")
             } footer: {
-                Text("Infuse spielt MKV, HDR/Dolby Vision und Atmos und meldet beim Schliessen die Position zurück, damit „Weiterschauen“ stimmt. VLC spielt ebenfalls fast alle Formate, startet aber immer von vorne und meldet keine Position.")
+                Text(Platform.isMac
+                     ? "Der integrierte Player spielt MKV und MP4 mit allen Ton- und Untertitelspuren und merkt sich die Position für „Weiterschauen“. VLC spielt ebenfalls fast alle Formate, startet aber immer von vorne und meldet keine Position."
+                     : "Infuse spielt MKV, HDR/Dolby Vision und Atmos und meldet beim Schliessen die Position zurück, damit „Weiterschauen“ stimmt. VLC spielt ebenfalls fast alle Formate, startet aber immer von vorne und meldet keine Position.")
             }
 
             Section {

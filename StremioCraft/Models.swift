@@ -186,14 +186,17 @@ enum PlayerChoice: String, Codable, CaseIterable, Identifiable {
     case builtIn
     var id: String { rawValue }
 
-    /// Auf dem Mac ist VLC verbreiteter als Infuse.
-    static var platformDefault: PlayerChoice { Platform.isMac ? .vlc : .infuse }
+    /// Auf dem Mac spielt der integrierte Player (KSPlayer) auch MKV und kennt die Position selbst.
+    static var platformDefault: PlayerChoice { Platform.isMac ? .builtIn : .infuse }
+
+    /// Nur der Mac-Player basiert auf FFmpeg; AVPlayer auf tvOS/iPadOS kann kein MKV.
+    static var builtInPlaysMKV: Bool { Platform.isMac }
 
     var label: String {
         switch self {
         case .infuse: return "Infuse"
         case .vlc: return "VLC"
-        case .builtIn: return "Integrierter Player"
+        case .builtIn: return Self.builtInPlaysMKV ? "Integrierter Player (MKV & MP4)" : "Integrierter Player"
         }
     }
 }

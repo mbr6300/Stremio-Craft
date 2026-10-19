@@ -19,16 +19,11 @@ struct PlaybackView: View {
     var body: some View {
         Group {
             if let playerURL {
-                PlayerScreen(url: playerURL, resume: request.resumeSeconds) { position, duration in
-                    model.saveProgress(
-                        media: request.media,
-                        position: position,
-                        duration: duration,
-                        season: request.season,
-                        episode: request.episode,
-                        episodeTitle: request.episodeTitle
-                    )
-                }
+                #if targetEnvironment(macCatalyst) && canImport(KSPlayer)
+                MacPlayerScreen(url: playerURL, title: playerTitle, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
+                #else
+                PlayerScreen(url: playerURL, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
+                #endif
             } else {
                 ZStack {
                     BackdropLayer(url: request.media.backdropURL)
@@ -261,8 +256,24 @@ struct PlaybackView: View {
         )
     }
 
+    private func saveBuiltInProgress(position: Double, duration: Double) {
+        model.saveProgress(
+            media: request.media,
+            position: position,
+            duration: duration,
+            season: request.season,
+            episode: request.episode,
+            episodeTitle: request.episodeTitle
+        )
+    }
+
+    private var playerTitle: String {
+        [request.media.title, request.episodeLabel, request.episodeTitle].compactMap { $0 }.joined(separator: " · ")
+    }
+
     private func startBuiltIn(_ url: URL) {
-        if Self.needsInfuse(url) {
+        // Der Mac-Player (KSPlayer) kann MKV; nur AVPlayer braucht den Hinweis.
+        if !PlayerChoice.builtInPlaysMKV, Self.needsInfuse(url) {
             banner = "Dieses Format (z. B. MKV) kann der integrierte Player meist nicht – Infuse empfohlen."
         }
         playerURL = url
