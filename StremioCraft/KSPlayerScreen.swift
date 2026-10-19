@@ -1,10 +1,10 @@
-#if targetEnvironment(macCatalyst) && canImport(KSPlayer)
+#if canImport(KSPlayer)
 import KSPlayer
 import SwiftUI
 
-/// Integrierter Player auf dem Mac: KSPlayer (FFmpeg) spielt auch MKV, HEVC/HDR,
+/// Integrierter Player auf Mac, iPad und Apple TV: KSPlayer (FFmpeg) spielt auch MKV, HEVC/HDR,
 /// DTS/TrueHD sowie eingebettete Untertitel – anders als AVPlayer.
-struct MacPlayerScreen: View {
+struct KSPlayerScreen: View {
     var url: URL
     var title: String
     var resume: Double
@@ -26,9 +26,9 @@ struct MacPlayerScreen: View {
 
     var body: some View {
         KSVideoPlayerView(coordinator: coordinator, url: url, options: options, title: title)
-            // Unter der Titelleiste beginnen, damit der Schliessen-Knopf des Players
+            // Mac: unter der Titelleiste beginnen, damit der Schliessen-Knopf des Players
             // nicht unter den Fensterknöpfen (rot/gelb/grün) liegt.
-            .padding(.top, 30)
+            .padding(.top, Platform.isMac ? 30 : 0)
             .background(Color.black.ignoresSafeArea())
             .onAppear {
                 coordinator.onPlay = { current, total in

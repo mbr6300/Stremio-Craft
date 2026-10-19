@@ -17,16 +17,16 @@ struct PlaybackView: View {
     @State private var lastResolved: (stream: StreamCandidate, url: URL)?
 
     var body: some View {
-        #if targetEnvironment(macCatalyst) && canImport(KSPlayer)
-        // Mac: Player als Vollbild-Ebene über dem ganzen Fenster, damit die Seitenleiste
-        // weder das Bild noch den Schliessen-Knopf des Players verdeckt.
+        #if canImport(KSPlayer)
+        // Player als Vollbild-Ebene über allem, damit Seiten- oder Tab-Leiste
+        // weder das Bild noch den Schliessen-Knopf des Players verdecken.
         content(showsPlayer: false)
             .fullScreenCover(isPresented: Binding(
                 get: { playerURL != nil },
                 set: { if !$0 { playerURL = nil } }
             )) {
                 if let playerURL {
-                    MacPlayerScreen(url: playerURL, title: playerTitle, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
+                    KSPlayerScreen(url: playerURL, title: playerTitle, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
                 }
             }
         #else
@@ -286,10 +286,12 @@ struct PlaybackView: View {
     }
 
     private func startBuiltIn(_ url: URL) {
-        // Der Mac-Player (KSPlayer) kann MKV; nur AVPlayer braucht den Hinweis.
-        if !PlayerChoice.builtInPlaysMKV, Self.needsInfuse(url) {
+        #if !canImport(KSPlayer)
+        // Nur AVPlayer braucht den Hinweis; KSPlayer (FFmpeg) spielt auch MKV.
+        if Self.needsInfuse(url) {
             banner = "Dieses Format (z. B. MKV) kann der integrierte Player meist nicht – Infuse empfohlen."
         }
+        #endif
         playerURL = url
     }
 
