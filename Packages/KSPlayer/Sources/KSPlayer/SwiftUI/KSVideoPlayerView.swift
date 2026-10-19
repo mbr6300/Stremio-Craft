@@ -687,6 +687,38 @@ struct VideoSettingView: View {
     private var dismiss
 
     var body: some View {
+        #if targetEnvironment(macCatalyst)
+        // Ohne Navigationsrahmen zeigt Catalyst die Werkzeugleiste des Blatts nicht an –
+        // das Fenster liess sich dann nicht mehr schliessen.
+        NavigationStack {
+            content
+                .navigationTitle("Informationen")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Fertig") { dismiss() }
+                            .keyboardShortcut(.defaultAction)
+                    }
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Schliessen") { dismiss() }
+                            .keyboardShortcut(.cancelAction)
+                    }
+                }
+        }
+        .frame(minWidth: 520, minHeight: 360)
+        #else
+        content
+        #if os(macOS) || os(xrOS)
+        .toolbar {
+            Button("Done") {
+                dismiss()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+        #endif
+        #endif
+    }
+
+    private var content: some View {
         PlatformView {
             let videoTracks = config.playerLayer?.player.tracks(mediaType: .video)
             if let videoTracks, !videoTracks.isEmpty {
@@ -701,31 +733,22 @@ struct VideoSettingView: View {
                         Text(track.description).tag(track.trackID as Int32?)
                     }
                 } label: {
-                    Label("Video Track", systemImage: "video.fill")
+                    Label("Videospur", systemImage: "video.fill")
                 }
-                LabeledContent("Video Type", value: (videoTracks.first { $0.isEnabled }?.dynamicRange ?? .sdr).description)
+                LabeledContent("Bildformat", value: (videoTracks.first { $0.isEnabled }?.dynamicRange ?? .sdr).description)
             }
-            TextField("Sutitle delay", value: $subtitleModel.subtitleDelay, format: .number)
-            TextField("Title", text: $subtitleTitle)
-            Button("Search Sutitle") {
-                subtitleModel.searchSubtitle(query: subtitleTitle, languages: ["zh-cn"])
+            LabeledContent("Untertitel-Verschiebung (Sekunden)") {
+                TextField("0", value: $subtitleModel.subtitleDelay, format: .number)
+                    .multilineTextAlignment(.trailing)
             }
-            LabeledContent("Stream Type", value: (videoTracks?.first { $0.isEnabled }?.fieldOrder ?? .progressive).description)
+            LabeledContent("Bildaufbau", value: (videoTracks?.first { $0.isEnabled }?.fieldOrder ?? .progressive).description)
             if let dynamicInfo = config.playerLayer?.player.dynamicInfo {
                 DynamicInfoView(dynamicInfo: dynamicInfo)
             }
             if let fileSize = config.playerLayer?.player.fileSize, fileSize > 0 {
-                LabeledContent("File Size", value: fileSize.kmFormatted + "B")
+                LabeledContent("Dateigrösse", value: fileSize.kmFormatted + "B")
             }
         }
-        #if os(macOS) || targetEnvironment(macCatalyst) || os(xrOS)
-        .toolbar {
-            Button("Done") {
-                dismiss()
-            }
-            .keyboardShortcut(.defaultAction)
-        }
-        #endif
     }
 }
 
@@ -734,12 +757,12 @@ public struct DynamicInfoView: View {
     @ObservedObject
     fileprivate var dynamicInfo: DynamicInfo
     public var body: some View {
-        LabeledContent("Display FPS", value: dynamicInfo.displayFPS, format: .number)
-        LabeledContent("Audio Video sync", value: dynamicInfo.audioVideoSyncDiff, format: .number)
-        LabeledContent("Dropped Frames", value: dynamicInfo.droppedVideoFrameCount + dynamicInfo.droppedVideoPacketCount, format: .number)
-        LabeledContent("Bytes Read", value: dynamicInfo.bytesRead.kmFormatted + "B")
-        LabeledContent("Audio bitrate", value: dynamicInfo.audioBitrate.kmFormatted + "bps")
-        LabeledContent("Video bitrate", value: dynamicInfo.videoBitrate.kmFormatted + "bps")
+        LabeledContent("Bilder pro Sekunde", value: dynamicInfo.displayFPS, format: .number)
+        LabeledContent("Abweichung Ton zu Bild (s)", value: dynamicInfo.audioVideoSyncDiff, format: .number)
+        LabeledContent("Ausgelassene Bilder", value: dynamicInfo.droppedVideoFrameCount + dynamicInfo.droppedVideoPacketCount, format: .number)
+        LabeledContent("Geladene Daten", value: dynamicInfo.bytesRead.kmFormatted + "B")
+        LabeledContent("Datenrate Ton", value: dynamicInfo.audioBitrate.kmFormatted + "bps")
+        LabeledContent("Datenrate Bild", value: dynamicInfo.videoBitrate.kmFormatted + "bps")
     }
 }
 

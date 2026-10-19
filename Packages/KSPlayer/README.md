@@ -11,3 +11,6 @@ Stand `da0c29a40087fbc471e1119f2140ea21d4c9791c` von https://github.com/kingslay
 - Untertitel-Menü (`SwiftUI/KSVideoPlayerViewBuilder.swift`, `MEPlayer/FFmpegAssetTrack.swift`): „Sprache · Art“
   (z. B. „Englisch · Für Hörgeschädigte“, „Deutsch · Nur fremdsprachige Stellen“), „Aus“ statt „Off“;
   `FFmpegAssetTrack` merkt sich dafür Titel sowie die Kennzeichen „erzwungen“ und „für Hörgeschädigte“.
+- Info-Fenster (`VideoSettingView` in `SwiftUI/KSVideoPlayerView.swift`): unter Mac Catalyst in einen
+  `NavigationStack` gesetzt, damit „Fertig“/„Schliessen“ (Return/Esc) sichtbar sind; Angaben auf Deutsch;
+  die fest auf Chinesisch eingestellte Untertitelsuche entfernt.
