@@ -88,6 +88,15 @@ struct QuickMenu: View {
                     .buttonStyle(MenuEntryStyle(isCurrent: model.selectedTab == tab))
                     .focused($focused, equals: tab)
                 }
+                Button {
+                    isPresented = false
+                    model.showHelp = true
+                } label: {
+                    Label("Hilfe & Tipps", systemImage: "questionmark.circle")
+                        .font(.system(size: Theme.s(28), weight: .semibold))
+                }
+                .buttonStyle(MenuEntryStyle(isCurrent: false))
+                .padding(.top, Theme.s(16))
                 Spacer()
             }
             .padding(.horizontal, Theme.s(36))

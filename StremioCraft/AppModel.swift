@@ -21,6 +21,10 @@ final class AppModel {
     private let profilesKey = "profiles"
     private let activeProfileKey = "activeProfile"
     private let zoomKey = "uiZoom"
+    private let helpSeenKey = "helpSeen"
+
+    /// Hilfe-Ebene sichtbar; beim allerersten Start automatisch.
+    var showHelp = false
 
     /// Darstellungsgrösse auf iPad und Mac (siehe `Zoom`).
     private(set) var zoom: Double = Zoom.standard
@@ -110,6 +114,7 @@ final class AppModel {
         player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .platformDefault
         autoPlayBest = defaults.object(forKey: autoPlayKey) as? Bool ?? true
         zoom = defaults.object(forKey: zoomKey) as? Double ?? Zoom.standard
+        showHelp = !defaults.bool(forKey: helpSeenKey)
         Theme.zoom = zoom
         profiles = decodeList(Profile.self, key: profilesKey)
         activeProfileID = defaults.string(forKey: activeProfileKey).flatMap { id in
@@ -801,6 +806,11 @@ final class AppModel {
         guard code != country else { return }
         country = code
         defaults.set(code, forKey: countryKey)
+    }
+
+    func closeHelp() {
+        showHelp = false
+        defaults.set(true, forKey: helpSeenKey)
     }
 
     /// Setzt die Darstellungsgrösse; die Oberfläche wird dadurch neu aufgebaut.

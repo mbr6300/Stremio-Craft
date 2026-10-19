@@ -17,6 +17,14 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Hilfe") {
+                Button {
+                    model.showHelp = true
+                } label: {
+                    Label("Tipps & versteckte Funktionen anzeigen", systemImage: "questionmark.circle")
+                }
+            }
+
             Section("Startseite") {
                 NavigationLink(value: AppRoute.lists) {
                     LabeledContent("Listen & Reihen", value: "\(model.catalogs.filter(\.enabled).count) aktiv")

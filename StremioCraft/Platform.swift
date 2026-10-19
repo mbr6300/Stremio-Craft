@@ -69,6 +69,36 @@ extension View {
         #endif
     }
 
+    /// Fokusbereich für `tvPrefersDefaultFocus`; ausserhalb von tvOS ohne Wirkung.
+    @ViewBuilder
+    func tvFocusScope(_ namespace: Namespace.ID) -> some View {
+        #if os(tvOS)
+        focusScope(namespace)
+        #else
+        self
+        #endif
+    }
+
+    /// Element, das beim Erscheinen den Fokus bekommt (tvOS).
+    @ViewBuilder
+    func tvPrefersDefaultFocus(in namespace: Namespace.ID) -> some View {
+        #if os(tvOS)
+        prefersDefaultFocus(true, in: namespace)
+        #else
+        self
+        #endif
+    }
+
+    /// Tastenkürzel (Mac/iPad-Tastatur); auf tvOS ohne Wirkung.
+    @ViewBuilder
+    func keyShortcut(_ shortcut: KeyboardShortcutKind) -> some View {
+        #if os(tvOS)
+        self
+        #else
+        keyboardShortcut(shortcut == .confirm ? .defaultAction : .cancelAction)
+        #endif
+    }
+
     /// Menü-/Zurück-Taste der Fernbedienung; auf dem iPad ohne Wirkung.
     @ViewBuilder
     func tvOnExitCommand(perform action: (() -> Void)?) -> some View {
@@ -78,4 +108,11 @@ extension View {
         self
         #endif
     }
+}
+
+enum KeyboardShortcutKind {
+    /// Return
+    case confirm
+    /// Esc
+    case cancel
 }

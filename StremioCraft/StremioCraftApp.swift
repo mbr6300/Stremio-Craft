@@ -32,6 +32,10 @@ struct StremioCraftApp: App {
                 Button("Standardgrösse") { model.setZoom(Zoom.standard) }
                     .keyboardShortcut("0")
             }
+            CommandGroup(replacing: .help) {
+                Button("Tipps & Funktionen von Stremio Craft") { model.showHelp = true }
+                    .keyboardShortcut("?")
+            }
         }
         #endif
     }
@@ -51,20 +55,32 @@ struct RootView: View {
         #if os(tvOS)
         ZStack(alignment: .leading) {
             tabs
-                // Solange das Schnellmenü offen ist, bekommt nur es den Fokus.
-                .disabled(quickMenu)
+                // Solange Schnellmenü oder Hilfe offen sind, bekommen nur sie den Fokus.
+                .disabled(quickMenu || model.showHelp)
             if quickMenu {
                 QuickMenu(isPresented: $quickMenu)
                     .zIndex(1)
             }
+            if model.showHelp {
+                HelpOverlay()
+                    .zIndex(2)
+            }
         }
         .animation(.easeOut(duration: 0.25), value: quickMenu)
-        .background(LongPressLeftDetector { quickMenu = true })
+        .animation(.easeOut(duration: 0.25), value: model.showHelp)
+        .background(LongPressLeftDetector { if !model.showHelp { quickMenu = true } })
         #else
         // iPad: Tab-Leiste bzw. Seitenleiste des Systems, kein Fernbedienungs-Schnellmenü nötig.
         // Neuaufbau bei geänderter Darstellungsgrösse, da die Masse statisch berechnet werden.
-        tabs
-            .id(model.zoom)
+        ZStack {
+            tabs
+                .id(model.zoom)
+            if model.showHelp {
+                HelpOverlay()
+                    .zIndex(1)
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: model.showHelp)
         #endif
     }
 
