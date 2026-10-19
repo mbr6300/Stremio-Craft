@@ -17,13 +17,27 @@ struct PlaybackView: View {
     @State private var lastResolved: (stream: StreamCandidate, url: URL)?
 
     var body: some View {
+        #if targetEnvironment(macCatalyst) && canImport(KSPlayer)
+        // Mac: Player als Vollbild-Ebene über dem ganzen Fenster, damit die Seitenleiste
+        // weder das Bild noch den Schliessen-Knopf des Players verdeckt.
+        content(showsPlayer: false)
+            .fullScreenCover(isPresented: Binding(
+                get: { playerURL != nil },
+                set: { if !$0 { playerURL = nil } }
+            )) {
+                if let playerURL {
+                    MacPlayerScreen(url: playerURL, title: playerTitle, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
+                }
+            }
+        #else
+        content(showsPlayer: true)
+        #endif
+    }
+
+    private func content(showsPlayer: Bool) -> some View {
         Group {
-            if let playerURL {
-                #if targetEnvironment(macCatalyst) && canImport(KSPlayer)
-                MacPlayerScreen(url: playerURL, title: playerTitle, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
-                #else
+            if showsPlayer, let playerURL {
                 PlayerScreen(url: playerURL, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
-                #endif
             } else {
                 ZStack {
                     BackdropLayer(url: request.media.backdropURL)

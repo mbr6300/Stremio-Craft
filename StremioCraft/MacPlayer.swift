@@ -26,7 +26,10 @@ struct MacPlayerScreen: View {
 
     var body: some View {
         KSVideoPlayerView(coordinator: coordinator, url: url, options: options, title: title)
-            .ignoresSafeArea()
+            // Unter der Titelleiste beginnen, damit der Schliessen-Knopf des Players
+            // nicht unter den Fensterknöpfen (rot/gelb/grün) liegt.
+            .padding(.top, 30)
+            .background(Color.black.ignoresSafeArea())
             .onAppear {
                 coordinator.onPlay = { current, total in
                     position = current
