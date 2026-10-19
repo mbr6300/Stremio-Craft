@@ -475,6 +475,18 @@ struct VideoControllerView: View {
         KSVideoPlayerViewBuilder.contentModeButton(config: config)
     }
 
+    /// Lesbarer Name; bei gleichlautenden Spuren wird der Titel aus der Datei angehängt.
+    static func audioMenuTitle(_ track: MediaPlayerTrack, in tracks: [MediaPlayerTrack]) -> String {
+        let title = track.menuTitle
+        let duplicates = tracks.filter { $0.menuTitle == title }
+        guard duplicates.count > 1 else { return title }
+        if !track.name.isEmpty, track.name != track.languageCode, !duplicates.allSatisfy({ $0.name == track.name }) {
+            return "\(title) (\(track.name))"
+        }
+        let index = (duplicates.firstIndex { $0 === track } ?? 0) + 1
+        return "\(title) (\(index))"
+    }
+
     private func audioButton(audioTracks: [MediaPlayerTrack]) -> some View {
         MenuView(selection: Binding {
             audioTracks.first { $0.isEnabled }?.trackID
@@ -484,7 +496,7 @@ struct VideoControllerView: View {
             }
         }) {
             ForEach(audioTracks, id: \.trackID) { track in
-                Text(track.description).tag(track.trackID as Int32?)
+                Text(Self.audioMenuTitle(track, in: audioTracks)).tag(track.trackID as Int32?)
             }
         } label: {
             Image(systemName: "waveform.circle.fill")
