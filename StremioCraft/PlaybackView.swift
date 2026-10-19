@@ -5,6 +5,7 @@ import UIKit
 
 struct PlaybackView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.finishPlayback) private var finishPlayback
     var request: PlaybackRequest
 
     @State private var streams: [StreamCandidate] = []
@@ -24,7 +25,10 @@ struct PlaybackView: View {
             .fullScreenCover(isPresented: Binding(
                 get: { playerURL != nil },
                 set: { if !$0 { playerURL = nil } }
-            )) {
+            ), onDismiss: {
+                // Nach dem Schauen zur Detailseite statt zurück in die Streamliste.
+                finishPlayback(request.media)
+            }) {
                 if let playerURL {
                     KSPlayerScreen(url: playerURL, title: playerTitle, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
                 }
