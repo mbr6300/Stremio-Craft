@@ -206,17 +206,31 @@ struct PlaybackView: View {
         openExternal(infuse, app: "Infuse", missingHint: "Ist Infuse (ab Version 8.4.7) installiert?")
     }
 
-    /// VLC für tvOS: `vlc-x-callback://x-callback-url/stream?url=…` spielt direkt ab.
+    /// VLC für tvOS/iPadOS: `vlc-x-callback://x-callback-url/stream?url=…` spielt direkt ab;
+    /// auf dem Mac wird die Stream-Adresse direkt an VLC übergeben.
     /// VLC kann weder an einer Position starten noch die Position zurückmelden.
     private func openVLC(_ url: URL) {
+        if request.resumeSeconds >= 15 {
+            banner = "VLC startet von vorne – zum Fortsetzen bei \(WatchProgress.clock(request.resumeSeconds)) vorspulen."
+        }
+        #if targetEnvironment(macCatalyst)
+        status = "Übergabe an VLC…"
+        Platform.openInMacApp(bundleID: "org.videolan.vlc", url: url) { success in
+            if success {
+                status = "In VLC geöffnet."
+                recordHandoff()
+            } else {
+                banner = "VLC liess sich nicht öffnen. Ist VLC im Programme-Ordner installiert?"
+                status = "Übergabe fehlgeschlagen."
+            }
+        }
+        #else
         guard let vlc = Self.vlcURL(stream: url) else {
             banner = "VLC-Adresse konnte nicht gebaut werden."
             return
         }
-        if request.resumeSeconds >= 15 {
-            banner = "VLC startet von vorne – zum Fortsetzen bei \(WatchProgress.clock(request.resumeSeconds)) vorspulen."
-        }
         openExternal(vlc, app: "VLC", missingHint: "Ist VLC installiert?")
+        #endif
     }
 
     private func openExternal(_ target: URL, app: String, missingHint: String) {
@@ -225,23 +239,26 @@ struct PlaybackView: View {
             Task { @MainActor in
                 if success {
                     status = "In \(app) geöffnet."
-                    // Sofort in „Weiterschauen“ aufnehmen; Infuse meldet die echte Position beim Schliessen.
-                    if model.progress(for: request.media) == nil {
-                        model.saveProgress(
-                            media: request.media,
-                            position: max(request.resumeSeconds, 15),
-                            duration: request.durationHint,
-                            season: request.season,
-                            episode: request.episode,
-                            episodeTitle: request.episodeTitle
-                        )
-                    }
+                    recordHandoff()
                 } else {
                     banner = "\(app) liess sich nicht öffnen. \(missingHint)"
                     status = "Übergabe fehlgeschlagen."
                 }
             }
         }
+    }
+
+    /// Sofort in „Weiterschauen“ aufnehmen; Infuse meldet die echte Position beim Schliessen.
+    private func recordHandoff() {
+        guard model.progress(for: request.media) == nil else { return }
+        model.saveProgress(
+            media: request.media,
+            position: max(request.resumeSeconds, 15),
+            duration: request.durationHint,
+            season: request.season,
+            episode: request.episode,
+            episodeTitle: request.episodeTitle
+        )
     }
 
     private func startBuiltIn(_ url: URL) {

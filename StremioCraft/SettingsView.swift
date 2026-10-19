@@ -8,7 +8,7 @@ struct SettingsView: View {
     @State private var sort = ""
     @State private var qualityFilter = ""
     @State private var language = ""
-    @State private var player: PlayerChoice = .infuse
+    @State private var player: PlayerChoice = .platformDefault
     @State private var autoPlay = true
     @State private var tokenDraft = ""
     @State private var status = ""

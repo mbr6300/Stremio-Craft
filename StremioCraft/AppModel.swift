@@ -25,7 +25,7 @@ final class AppModel {
     var tmdbKeyOverride: String
     var torrentio = TorrentioOptions()
     var catalogs: [CatalogEntry] = CatalogEntry.defaults
-    var player: PlayerChoice = .infuse
+    var player: PlayerChoice = .platformDefault
     var autoPlayBest = true
     var continueWatching: [WatchProgress] = []
     var favorites: [FavoriteItem] = []
@@ -100,7 +100,7 @@ final class AppModel {
             }
         }
         defaults.set(CatalogEntry.defaultsVersion, forKey: catalogsVersionKey)
-        player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .infuse
+        player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .platformDefault
         autoPlayBest = defaults.object(forKey: autoPlayKey) as? Bool ?? true
         profiles = decodeList(Profile.self, key: profilesKey)
         activeProfileID = defaults.string(forKey: activeProfileKey).flatMap { id in

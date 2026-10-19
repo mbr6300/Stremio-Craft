@@ -185,6 +185,10 @@ enum PlayerChoice: String, Codable, CaseIterable, Identifiable {
     case vlc
     case builtIn
     var id: String { rawValue }
+
+    /// Auf dem Mac ist VLC verbreiteter als Infuse.
+    static var platformDefault: PlayerChoice { Platform.isMac ? .vlc : .infuse }
+
     var label: String {
         switch self {
         case .infuse: return "Infuse"
