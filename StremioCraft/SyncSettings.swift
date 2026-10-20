@@ -8,6 +8,7 @@ struct SyncSettingsSection: View {
     @State private var message: String?
     @State private var busy = false
     @State private var showCode = false
+    @State private var nameDraft = ""
 
     var body: some View {
         Section {
@@ -26,6 +27,10 @@ struct SyncSettingsSection: View {
             Text("Geräte-Sync")
         } footer: {
             Text("Meine Liste, Lieblingstitel, Gesehenes, „Weiterschauen“, Profile, Listen und der Real-Debrid-Token werden über alle Geräte mit demselben Sync-Code geteilt – ohne Login. Die Daten werden auf dem Gerät verschlüsselt; der Server sieht nur unlesbare Daten.")
+        }
+
+        if sync.isEnabled {
+            deviceSection
         }
 
         Section {
@@ -75,9 +80,47 @@ struct SyncSettingsSection: View {
         .disabled(busy || pinDraft.filter(\.isNumber).count != 6)
 
         Button("Sync auf diesem Gerät beenden", role: .destructive) {
-            sync.disconnect()
-            showCode = false
-            message = "Sync beendet. Die Daten auf diesem Gerät bleiben erhalten."
+            run {
+                await sync.leave()
+                showCode = false
+                message = "Sync beendet. Die Daten auf diesem Gerät bleiben erhalten."
+            }
+        }
+        .disabled(busy)
+    }
+
+    /// Alle Geräte mit diesem Sync-Code; ältere lassen sich aus der Liste nehmen.
+    private var deviceSection: some View {
+        Section {
+            ForEach(sync.devices) { device in
+                HStack(spacing: 14) {
+                    Image(systemName: device.kind.symbol)
+                        .frame(width: 30)
+                        .foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(device.name)
+                        Text(device.id == sync.deviceID
+                             ? "Dieses Gerät"
+                             : "Zuletzt aktiv " + device.lastSeen.formatted(.relative(presentation: .named)))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .contextMenu {
+                    if device.id != sync.deviceID {
+                        Button("Aus Liste entfernen", role: .destructive) {
+                            Task { await sync.removeDevice(device.id) }
+                        }
+                    }
+                }
+            }
+            TextField("Name dieses Geräts", text: $nameDraft)
+                .onSubmit { Task { await sync.renameDevice(nameDraft) } }
+                .onAppear { if nameDraft.isEmpty { nameDraft = sync.deviceName } }
+        } header: {
+            Text("Verbundene Geräte")
+        } footer: {
+            Text("Gedrückt halten entfernt ein altes Gerät aus der Liste. Kennt es den Sync-Code noch, erscheint es beim nächsten Abgleich wieder.")
         }
     }
 

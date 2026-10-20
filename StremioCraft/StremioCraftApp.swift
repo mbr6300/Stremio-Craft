@@ -33,7 +33,7 @@ struct StremioCraftApp: App {
                         model.handleCallback(url)
                     }
                     // Sync-Tests: `-syncReset YES` beendet den Sync auf diesem Gerät.
-                    if UserDefaults.standard.bool(forKey: "syncReset") { sync.disconnect() }
+                    if UserDefaults.standard.bool(forKey: "syncReset") { Task { await sync.leave() } }
                     // Kopplung ohne Fernbedienung testen: `-syncStartPairing YES` zeigt sofort eine PIN.
                     if UserDefaults.standard.bool(forKey: "syncStartPairing"), !sync.isEnabled {
                         Task { await sync.startPairing() }

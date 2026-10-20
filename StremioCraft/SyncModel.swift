@@ -97,6 +97,35 @@ struct SyncSnapshot: Codable, Equatable {
     var country: String?
     var torrentio: TorrentioOptions?
     var realDebridToken: String?
+    /// Mit dem Konto verbundene Geräte (fehlt in Ständen vor dieser Funktion).
+    var devices: [SyncDevice]?
+
+    /// Nur die geteilten Inhalte – ohne Geräteliste, die das AppModel nicht betrifft.
+    var sharedData: SyncSnapshot {
+        var copy = self
+        copy.devices = nil
+        return copy
+    }
+}
+
+/// Ein verbundenes Gerät, sichtbar in Einstellungen → Geräte-Sync.
+struct SyncDevice: Codable, Equatable, Identifiable {
+    enum Kind: String, Codable {
+        case tv, ipad, mac
+
+        var symbol: String {
+            switch self {
+            case .tv: return "appletv"
+            case .ipad: return "ipad"
+            case .mac: return "laptopcomputer"
+            }
+        }
+    }
+
+    var id: String
+    var name: String
+    var kind: Kind
+    var lastSeen: Date
 }
 
 struct SyncBucket: Codable, Equatable {
@@ -130,6 +159,9 @@ enum SyncMerge {
         result.country = value(base.country, local.country, remote.country, preferRemote: joining)
         result.torrentio = value(base.torrentio, local.torrentio, remote.torrentio, preferRemote: joining)
         result.realDebridToken = value(base.realDebridToken, local.realDebridToken, remote.realDebridToken, preferRemote: joining && remote.realDebridToken != nil)
+        result.devices = keyed(base.devices ?? [], local.devices ?? [], remote.devices ?? [], id: \.id) { mine, theirs in
+            mine.lastSeen >= theirs.lastSeen ? mine : theirs
+        }
         return result
     }
 

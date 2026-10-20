@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Observation
+import UIKit
 
 /// Geräte-Sync über einen eigenen Cloudflare-Worker (siehe `cloudflare/sync-worker`).
 /// Kein Login: Alle Geräte mit demselben Sync-Code teilen sich einen verschlüsselten Datenblock.
@@ -19,6 +20,10 @@ final class SyncService {
     private(set) var lastSync: Date?
     /// PIN, die dieses Gerät zum Koppeln anzeigt (während es auf den Code wartet).
     private(set) var pairingPIN: String?
+    /// Mit dem Konto verbundene Geräte, dieses zuerst.
+    private(set) var devices: [SyncDevice] = []
+    /// Name, unter dem dieses Gerät bei den anderen erscheint.
+    private(set) var deviceName: String
     var serverOverride: String {
         didSet { defaults.set(serverOverride.trimmingCharacters(in: .whitespacesAndNewlines), forKey: serverKey) }
     }
@@ -34,14 +39,26 @@ final class SyncService {
     @ObservationIgnored private var pairingTask: Task<Void, Never>?
     @ObservationIgnored private var running = false
     @ObservationIgnored private var pendingRun = false
+    /// Geräte, die beim nächsten Abgleich aus der Liste entfernt werden.
+    @ObservationIgnored private var pendingRemovals: Set<String> = []
+    /// Eindeutige ID dieser Installation (nicht geheim, nur für die Geräteliste).
+    let deviceID: String
 
     init(model: AppModel) {
         self.model = model
         serverOverride = defaults.string(forKey: serverKey) ?? ""
         lastSync = defaults.object(forKey: lastSyncKey) as? Date
+        if let id = defaults.string(forKey: "syncDeviceID") {
+            deviceID = id
+        } else {
+            deviceID = UUID().uuidString
+            defaults.set(deviceID, forKey: "syncDeviceID")
+        }
+        deviceName = defaults.string(forKey: "syncDeviceName") ?? Self.defaultDeviceName
         if let stored = KeychainStore.load(account: KeychainStore.syncCodeAccount), let code = SyncCode(input: stored) {
             self.code = code
             phase = .idle
+            devices = sorted(loadBase()?.devices ?? [])
             startLoop()
         }
     }
@@ -87,8 +104,17 @@ final class SyncService {
         startLoop()
     }
 
+    /// Sync beenden und dieses Gerät vorher aus der Geräteliste des Kontos austragen.
+    func leave() async {
+        pendingRemovals.insert(deviceID)
+        await syncNow()
+        disconnect()
+    }
+
     /// Sync auf diesem Gerät beenden; die lokalen Daten bleiben, das Konto auf dem Server auch.
     func disconnect() {
+        devices = []
+        pendingRemovals = []
         loop?.cancel()
         loop = nil
         cancelPairing()
@@ -157,8 +183,9 @@ final class SyncService {
 
     /// Ein Durchgang; `false` bei Konflikt (ein anderes Gerät war schneller) → erneut versuchen.
     private func attempt(code: SyncCode, server: URL) async throws -> Bool {
-        let local = model.syncSnapshot()
         let base = loadBase()
+        var local = model.syncSnapshot()
+        local.devices = deviceList(from: base?.devices ?? [])
         let baseVersion = base == nil ? 0 : defaults.integer(forKey: versionKey)
         let client = SyncClient(server: server)
 
@@ -177,18 +204,76 @@ final class SyncService {
         }
 
         let merged = remote.map { SyncMerge.merge(base: base, local: local, remote: $0) } ?? local
-        if merged != local { model.applySyncSnapshot(merged) }
+        if merged.sharedData != local.sharedData { model.applySyncSnapshot(merged) }
 
-        guard merged != remote else {
+        if merged != remote {
+            let blob = try code.seal(JSONEncoder().encode(merged))
+            guard let newVersion = try await client.store(space: code.spaceID, expectedVersion: remoteVersion, blob: blob) else {
+                return false
+            }
+            saveBase(merged, version: newVersion)
+        } else {
             saveBase(merged, version: remoteVersion)
-            return true
         }
-        let blob = try code.seal(JSONEncoder().encode(merged))
-        guard let newVersion = try await client.store(space: code.spaceID, expectedVersion: remoteVersion, blob: blob) else {
-            return false
-        }
-        saveBase(merged, version: newVersion)
+        devices = sorted(merged.devices ?? [])
+        pendingRemovals = []
         return true
+    }
+
+    // MARK: - Geräteliste
+
+    /// Liste wie zuletzt gemeinsam gesehen, mit aktuellem Eintrag dieses Geräts. „Zuletzt aktiv“
+    /// wird nur stündlich erneuert, damit nicht jeder Abgleich einen Schreibvorgang auslöst.
+    private func deviceList(from known: [SyncDevice]) -> [SyncDevice] {
+        var list = known.filter { !pendingRemovals.contains($0.id) }
+        guard !pendingRemovals.contains(deviceID) else { return list }
+        let kind: SyncDevice.Kind = Platform.isTV ? .tv : (Platform.isMac ? .mac : .ipad)
+        if let index = list.firstIndex(where: { $0.id == deviceID }) {
+            let current = list[index]
+            if current.name != deviceName || current.kind != kind || current.lastSeen < Date().addingTimeInterval(-3600) {
+                list[index] = SyncDevice(id: deviceID, name: deviceName, kind: kind, lastSeen: Date())
+            }
+        } else {
+            list.append(SyncDevice(id: deviceID, name: deviceName, kind: kind, lastSeen: Date()))
+        }
+        return list
+    }
+
+    private func sorted(_ list: [SyncDevice]) -> [SyncDevice] {
+        list.sorted { lhs, rhs in
+            if lhs.id == deviceID { return true }
+            if rhs.id == deviceID { return false }
+            return lhs.lastSeen > rhs.lastSeen
+        }
+    }
+
+    func renameDevice(_ name: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != deviceName else { return }
+        deviceName = trimmed
+        defaults.set(trimmed, forKey: "syncDeviceName")
+        await syncNow()
+    }
+
+    /// Altes Gerät aus der Liste nehmen. Hat es den Code noch, trägt es sich beim nächsten Start
+    /// wieder ein – aussperren lässt es sich nur mit einem neuen Sync-Konto.
+    func removeDevice(_ id: String) async {
+        guard id != deviceID else { return }
+        pendingRemovals.insert(id)
+        devices.removeAll { $0.id == id }
+        await syncNow()
+    }
+
+    private static var defaultDeviceName: String {
+        #if targetEnvironment(macCatalyst)
+        // UIDevice liefert auf dem Mac keinen sinnvollen Namen; der Rechnername schon.
+        let host = ProcessInfo.processInfo.hostName
+            .replacingOccurrences(of: ".local", with: "")
+            .replacingOccurrences(of: "-", with: " ")
+        return host.isEmpty ? "Mac" : host
+        #else
+        return UIDevice.current.name
+        #endif
     }
 
     // MARK: - Basis (zuletzt gemeinsamer Stand)
