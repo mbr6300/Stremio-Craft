@@ -67,28 +67,15 @@ struct ProfilesView: View {
             Spacer(minLength: 0)
             Text(editing ? "Profile verwalten" : "Wer schaut?")
                 .font(.system(size: Theme.s(60), weight: .heavy))
-            HStack(alignment: .top, spacing: Theme.s(56)) {
-                if !editing {
-                    ProfileTile(name: "Alle", avatar: nil, isActive: model.activeProfileID == nil, editing: false) {
-                        choose(nil)
-                    }
-                }
-                ForEach(model.profiles) { profile in
-                    ProfileTile(name: profile.name, avatar: profile.avatar, isActive: model.activeProfileID == profile.id, editing: editing) {
-                        if editing { editTarget = profile } else { choose(profile.id) }
-                    }
-                    .contextMenu {
-                        Button("Bearbeiten") { editTarget = profile }
-                        Button("Löschen", role: .destructive) { model.deleteProfile(profile) }
-                    }
-                }
-                if model.profiles.count < Profile.maxCount {
-                    AddProfileTile {
-                        editTarget = Profile(name: "", avatar: Avatar.all[model.profiles.count % Avatar.all.count])
-                    }
+            // Passt die Reihe nicht (iPad hochkant, viele Profile), wird sie seitlich scrollbar.
+            ViewThatFits(in: .horizontal) {
+                tiles
+                ScrollView(.horizontal, showsIndicators: false) {
+                    tiles
+                        .padding(.horizontal, Theme.pagePadding)
+                        .padding(.vertical, Theme.s(30))
                 }
             }
-            .tvFocusSection()
             Text(subtitle)
                 .font(.system(size: Theme.s(22)))
                 .foregroundStyle(.white.opacity(0.55))
@@ -105,6 +92,31 @@ struct ProfilesView: View {
         .navigationDestination(item: $editTarget) { profile in
             ProfileEditView(profile: profile, isNew: !model.profiles.contains { $0.id == profile.id })
         }
+    }
+
+    private var tiles: some View {
+        HStack(alignment: .top, spacing: Theme.s(56)) {
+            if !editing {
+                ProfileTile(name: "Alle", avatar: nil, isActive: model.activeProfileID == nil, editing: false) {
+                    choose(nil)
+                }
+            }
+            ForEach(model.profiles) { profile in
+                ProfileTile(name: profile.name, avatar: profile.avatar, isActive: model.activeProfileID == profile.id, editing: editing) {
+                    if editing { editTarget = profile } else { choose(profile.id) }
+                }
+                .contextMenu {
+                    Button("Bearbeiten") { editTarget = profile }
+                    Button("Löschen", role: .destructive) { model.deleteProfile(profile) }
+                }
+            }
+            if model.profiles.count < Profile.maxCount {
+                AddProfileTile {
+                    editTarget = Profile(name: "", avatar: Avatar.all[model.profiles.count % Avatar.all.count])
+                }
+            }
+        }
+        .tvFocusSection()
     }
 
     private var subtitle: String {

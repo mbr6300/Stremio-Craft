@@ -113,7 +113,11 @@ struct HelpOverlay: View {
         }
         .tvOnExitCommand { close() }
         .tvFocusScope(focusScope)
-        .onAppear { focus = .next }
+        .onAppear {
+            focus = .next
+            // Beim App-Start ist die Fokus-Engine noch nicht bereit; dann nachträglich setzen.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { focus = .next }
+        }
         .transition(.opacity)
     }
 
