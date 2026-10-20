@@ -30,6 +30,25 @@ xc() {
     -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 }
 
+# FFmpegKit (KSPlayer) bringt für Mac Catalyst statische Bibliotheken in flachen iOS-Framework-
+# Hüllen mit. Xcode linkt den Code fest ein und kopiert nur leere Platzhalter mit, die App Store
+# Connect auf dem Mac als „Malformed Framework“ (ITMS-90291/90292) ablehnt. Die App verweist nicht
+# darauf – vor dem Export (der neu signiert) aus dem Archiv entfernen.
+strip_ffmpeg_stubs() {
+  app="$1/Products/Applications/StremioCraft.app"
+  binary="$app/Contents/MacOS/StremioCraft"
+  for fw in "$app"/Contents/Frameworks/*.framework; do
+    [ -f "$fw/Info.plist" ] || continue # nur flache Hüllen; echte macOS-Frameworks bleiben
+    fwname=$(basename "$fw" .framework)
+    if otool -L "$binary" | grep -q "/$fwname.framework/"; then
+      echo "  ⚠︎ $fwname.framework wird verwendet – bleibt" >&2
+      continue
+    fi
+    rm -rf "$fw"
+    echo "  – $fwname.framework (Platzhalter) entfernt"
+  done
+}
+
 upload() {
   name=$1
   destination=$2
@@ -39,6 +58,7 @@ upload() {
   xc -project StremioCraft.xcodeproj -scheme StremioCraft -configuration Release \
      -destination "$destination" -archivePath "$archive" -derivedDataPath build/archive \
      CURRENT_PROJECT_VERSION="$BUILD" archive -quiet
+  [ "$name" = Mac ] && strip_ffmpeg_stubs "$archive"
   echo "▶︎ $name: Upload zu App Store Connect"
   xc -exportArchive -archivePath "$archive" -exportPath "build/export/$name-$BUILD" \
      -exportOptionsPlist BuildSupport/ExportOptions-TestFlight.plist
@@ -53,5 +73,9 @@ for platform in $PLATFORMS; do
     *) echo "Unbekannte Plattform: $platform (tvos | ios | mac)" >&2; exit 1 ;;
   esac
 done
+
+# Neue Teammitglieder (z. B. nach testflight-invite.swift) in die Gruppe „Familie“ übernehmen.
+echo "▶︎ Testgruppe „Familie“ aktualisieren"
+swift scripts/testflight-setup.swift || echo "  (Gruppe konnte nicht aktualisiert werden – später erneut ausführen)"
 
 echo "Fertig. Die Builds erscheinen nach der Verarbeitung (meist 5–15 Minuten) in TestFlight."
