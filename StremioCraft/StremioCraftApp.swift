@@ -32,6 +32,12 @@ struct StremioCraftApp: App {
                     if let link = UserDefaults.standard.string(forKey: "openURL"), let url = URL(string: link) {
                         model.handleCallback(url)
                     }
+                    // Sync-Tests: `-debugRemoveProgress Sherlock` entfernt einen Titel aus „Weiterschauen“.
+                    if let title = UserDefaults.standard.string(forKey: "debugRemoveProgress"),
+                       let entry = model.continueWatching.first(where: { $0.title == title }) {
+                        model.removeProgress(entry)
+                        print("debugRemoveProgress: entfernt", title)
+                    }
                     // Sync-Tests: `-syncReset YES` beendet den Sync auf diesem Gerät.
                     if UserDefaults.standard.bool(forKey: "syncReset") { Task { await sync.leave() } }
                     // Kopplung ohne Fernbedienung testen: `-syncStartPairing YES` zeigt sofort eine PIN.

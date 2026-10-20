@@ -5,6 +5,7 @@ import UIKit
 
 struct PlaybackView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     var request: PlaybackRequest
 
     @State private var streams: [StreamCandidate] = []
@@ -85,6 +86,25 @@ struct PlaybackView: View {
                         .font(.system(size: Theme.s(22), weight: .semibold))
                         .foregroundStyle(.yellow)
                         .frame(maxWidth: Theme.s(1300), alignment: .leading)
+                }
+                if streams.isEmpty {
+                    // Ohne fokussierbares Element gibt tvOS die Menü-Taste ans System weiter und die
+                    // App wird verlassen – darum immer einen Knopf anbieten.
+                    HStack(spacing: Theme.s(20)) {
+                        Button("Zurück") { dismiss() }
+                            .buttonStyle(PillButtonStyle(prominent: !isLoading))
+                        if !isLoading {
+                            Button("Erneut suchen") {
+                                Task {
+                                    isLoading = true
+                                    status = "Streams werden gesucht…"
+                                    await loadStreams()
+                                }
+                            }
+                            .buttonStyle(PillButtonStyle())
+                        }
+                    }
+                    .tvFocusSection()
                 }
                 if let lastResolved, model.player != .builtIn {
                     HStack(spacing: Theme.s(20)) {

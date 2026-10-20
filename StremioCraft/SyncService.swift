@@ -133,14 +133,23 @@ final class SyncService {
 
     // MARK: - Synchronisieren
 
-    /// Regelmässig abgleichen, solange die App läuft (Änderungen lokal oder auf anderen Geräten).
+    /// Lokale Änderungen (z. B. aus „Weiterschauen“ entfernt) sofort weitergeben, sonst alle 45 s
+    /// nach Änderungen anderer Geräte schauen. Je schneller eine Änderung oben ist, desto seltener
+    /// überschreibt ein anderes Gerät sie mit seinem älteren Stand.
     private func startLoop() {
         loop?.cancel()
         loop = Task { [weak self] in
+            var lastLocal = self?.model.syncSnapshot().sharedData
+            var idle: TimeInterval = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(45))
+                try? await Task.sleep(for: .seconds(5))
                 guard let self, !Task.isCancelled else { return }
+                idle += 5
+                let current = self.model.syncSnapshot().sharedData
+                guard current != lastLocal || idle >= 45 else { continue }
+                idle = 0
                 await self.syncNow()
+                lastLocal = self.model.syncSnapshot().sharedData
             }
         }
     }
@@ -204,6 +213,9 @@ final class SyncService {
         }
 
         let merged = remote.map { SyncMerge.merge(base: base, local: local, remote: $0) } ?? local
+        // Hat sich lokal etwas geändert, während die Anfragen liefen (z. B. Titel entfernt), würde das
+        // Übernehmen von `merged` die Änderung überschreiben – dann mit frischem Stand neu beginnen.
+        guard model.syncSnapshot().sharedData == local.sharedData else { return false }
         if merged.sharedData != local.sharedData { model.applySyncSnapshot(merged) }
 
         if merged != remote {

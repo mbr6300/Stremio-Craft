@@ -211,12 +211,23 @@ private struct FilterPicker: View {
     @AppStorage("homeFilter") private var filter: MediaFilter = .all
 
     var body: some View {
+        #if os(tvOS)
+        // Auf tvOS wählt ein segmentierter Picker schon beim Darüberfahren – beim Navigieren
+        // schaltete man so versehentlich um. Knöpfe wechseln erst beim Klicken.
+        HStack(spacing: Theme.s(12)) {
+            ForEach(MediaFilter.allCases) { option in
+                Button(option.label) { filter = option }
+                    .buttonStyle(PillButtonStyle(selected: filter == option))
+            }
+        }
+        .tvFocusSection()
+        #else
         Picker("Anzeigen", selection: $filter) {
             ForEach(MediaFilter.allCases) { Text($0.label).tag($0) }
         }
         .pickerStyle(.segmented)
         .frame(width: Theme.s(460))
-        .tvFocusSection()
+        #endif
     }
 }
 
