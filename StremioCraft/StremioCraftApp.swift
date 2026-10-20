@@ -2,12 +2,26 @@ import SwiftUI
 
 @main
 struct StremioCraftApp: App {
-    @State private var model = AppModel()
+    @State private var model: AppModel
+    @State private var sync: SyncService
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        let model = AppModel()
+        _model = State(initialValue: model)
+        _sync = State(initialValue: SyncService(model: model))
+    }
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
+                .environment(sync)
+                // Geräte-Sync: beim Start, beim Zurückkehren und beim Verlassen der App abgleichen.
+                .task { await sync.syncNow() }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase != .inactive { Task { await sync.syncNow() } }
+                }
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
                 // x-callback von Infuse: stremiocraft://infuse-success?position=…
@@ -17,6 +31,16 @@ struct StremioCraftApp: App {
                 .onAppear {
                     if let link = UserDefaults.standard.string(forKey: "openURL"), let url = URL(string: link) {
                         model.handleCallback(url)
+                    }
+                    // Sync-Tests: `-syncReset YES` beendet den Sync auf diesem Gerät.
+                    if UserDefaults.standard.bool(forKey: "syncReset") { sync.disconnect() }
+                    // Kopplung ohne Fernbedienung testen: `-syncStartPairing YES` zeigt sofort eine PIN.
+                    if UserDefaults.standard.bool(forKey: "syncStartPairing"), !sync.isEnabled {
+                        Task { await sync.startPairing() }
+                    }
+                    // Gegenstück: `-syncSendPIN 123456` übergibt den Code an das wartende Gerät.
+                    if let pin = UserDefaults.standard.string(forKey: "syncSendPIN"), sync.isEnabled {
+                        Task { print("syncSendPIN:", await sync.sendCode(toPIN: pin) ?? "ok") }
                     }
                 }
                 #endif

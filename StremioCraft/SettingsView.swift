@@ -25,6 +25,8 @@ struct SettingsView: View {
                 }
             }
 
+            SyncSettingsSection()
+
             Section("Startseite") {
                 NavigationLink(value: AppRoute.lists) {
                     LabeledContent("Listen & Reihen", value: "\(model.catalogs.filter(\.enabled).count) aktiv")

@@ -176,7 +176,7 @@
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=iphoneos*]" = AppIconPad;
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=iphonesimulator*]" = AppIconPad;
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=macosx*]" = AppIconPad;
-				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_ALLOWED = YES;
 				"CODE_SIGNING_ALLOWED[sdk=appletvos*]" = YES;
 				"CODE_SIGNING_ALLOWED[sdk=iphoneos*]" = YES;
 				"CODE_SIGNING_ALLOWED[sdk=macosx*]" = YES;
@@ -227,7 +227,7 @@
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=iphoneos*]" = AppIconPad;
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=iphonesimulator*]" = AppIconPad;
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=macosx*]" = AppIconPad;
-				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_ALLOWED = YES;
 				"CODE_SIGNING_ALLOWED[sdk=appletvos*]" = YES;
 				"CODE_SIGNING_ALLOWED[sdk=iphoneos*]" = YES;
 				"CODE_SIGNING_ALLOWED[sdk=macosx*]" = YES;

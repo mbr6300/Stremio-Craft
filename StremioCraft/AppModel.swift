@@ -865,3 +865,87 @@ final class AppModel {
         return key.trimmingCharacters(in: .whitespacesAndNewlines)
     }()
 }
+
+// MARK: - Geräte-Sync
+
+extension AppModel {
+    /// Geteilter Stand aller Profile (ohne Gerätespezifisches wie Player oder Darstellungsgrösse).
+    func syncSnapshot() -> SyncSnapshot {
+        var buckets: [String: SyncBucket] = [:]
+        for id in bucketIDs {
+            let name = bucketName(id)
+            buckets[name] = SyncBucket(
+                favorites: favoriteBuckets[name] ?? [],
+                loved: lovedBuckets[name] ?? [],
+                progress: progressBuckets[name] ?? [],
+                watched: (watchedBuckets[name] ?? []).sorted(),
+                searches: defaults.stringArray(forKey: bucketKey(recentSearchesKey, id)) ?? []
+            )
+        }
+        return SyncSnapshot(
+            profiles: profiles,
+            buckets: buckets,
+            catalogs: catalogs,
+            country: country,
+            torrentio: torrentio,
+            realDebridToken: KeychainStore.loadToken()
+        )
+    }
+
+    /// Übernimmt einen zusammengeführten Stand von anderen Geräten.
+    func applySyncSnapshot(_ snapshot: SyncSnapshot) {
+        let removedProfiles = Set(profiles.map(\.id)).subtracting(snapshot.profiles.map(\.id))
+        for id in removedProfiles {
+            for base in [favoriteKey, lovedKey, continueKey, recentSearchesKey, watchedKey] {
+                defaults.removeObject(forKey: bucketKey(base, id))
+            }
+            favoriteBuckets[id] = nil
+            lovedBuckets[id] = nil
+            progressBuckets[id] = nil
+            watchedBuckets[id] = nil
+        }
+        if profiles != snapshot.profiles {
+            profiles = snapshot.profiles
+            save(profiles, key: profilesKey)
+        }
+        if let active = activeProfileID, !profiles.contains(where: { $0.id == active }) {
+            activeProfileID = nil
+            defaults.removeObject(forKey: activeProfileKey)
+        }
+
+        for id in bucketIDs {
+            let name = bucketName(id)
+            let bucket = snapshot.buckets[name] ?? SyncBucket()
+            favoriteBuckets[name] = bucket.favorites
+            lovedBuckets[name] = bucket.loved
+            progressBuckets[name] = bucket.progress
+            watchedBuckets[name] = Set(bucket.watched)
+            save(bucket.favorites, key: bucketKey(favoriteKey, id))
+            save(bucket.loved, key: bucketKey(lovedKey, id))
+            save(bucket.progress, key: bucketKey(continueKey, id))
+            defaults.set(bucket.watched, forKey: bucketKey(watchedKey, id))
+            defaults.set(bucket.searches, forKey: bucketKey(recentSearchesKey, id))
+        }
+
+        if let catalogs = snapshot.catalogs, catalogs != self.catalogs {
+            self.catalogs = catalogs
+            saveCatalogs()
+            loadCatalogsIfNeeded()
+        }
+        if let country = snapshot.country { setCountry(country) }
+        if let torrentio = snapshot.torrentio, torrentio != self.torrentio {
+            self.torrentio = torrentio
+            save(torrentio, key: torrentioKey)
+        }
+        // `nil` heisst: auf einem anderen Gerät entfernt (sonst hätte das Zusammenführen den eigenen behalten).
+        if snapshot.realDebridToken != KeychainStore.loadToken() {
+            try? setRealDebridToken(snapshot.realDebridToken)
+        }
+
+        refreshFavorites()
+        refreshContinueWatching()
+        refreshWatched()
+        recentSearches = defaults.stringArray(forKey: bucketKey(recentSearchesKey, activeProfileID)) ?? []
+        refreshPersonalRows()
+    }
+}
