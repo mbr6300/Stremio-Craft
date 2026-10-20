@@ -5,3 +5,4 @@ xcuserdata/
 *.xcuserstate
 StremioCraft/LocalSecrets.plist
 Screenshots/
+BuildSupport/testflight.env

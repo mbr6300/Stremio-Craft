@@ -234,7 +234,7 @@
 				CODE_SIGNING_REQUIRED = NO;
 				"CODE_SIGNING_REQUIRED[sdk=appletvos*]" = YES;
 				"CODE_SIGNING_REQUIRED[sdk=iphoneos*]" = YES;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = StremioCraftMac.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "StremioCraftMac-AppStore.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
