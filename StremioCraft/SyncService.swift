@@ -235,7 +235,8 @@ final class SyncService {
             pairingTask = Task { [weak self] in
                 let deadline = Date().addingTimeInterval(10 * 60)
                 while !Task.isCancelled, Date() < deadline {
-                    try? await Task.sleep(for: .seconds(2))
+                    // Alle 3 s – bleibt unter der Ratenbegrenzung des Workers (60/min pro IP).
+                    try? await Task.sleep(for: .seconds(3))
                     guard let payload = try? await client.pairingPayload(pin: pin) else { continue }
                     guard let self else { return }
                     await client.deletePairing(pin: pin)

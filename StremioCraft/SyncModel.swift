@@ -76,6 +76,7 @@ enum SyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .crypto: return "Die Sync-Daten liessen sich nicht entschlüsseln – stimmt der Code?"
+        case .server(429): return "Zu viele Anfragen – der Sync-Server bremst kurz. Bitte eine Minute warten."
         case .server(let status): return "Sync-Server antwortet mit Fehler \(status)."
         case .noServer: return "Kein Sync-Server eingetragen."
         case .pairingExpired: return "Die PIN ist abgelaufen oder unbekannt."

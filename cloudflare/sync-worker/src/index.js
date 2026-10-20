@@ -12,6 +12,8 @@
 //   GET    /v1/pair/:pin          → { publicKey, payload|null } | 404
 //   PUT    /v1/pair/:pin          { payload } → 204 | 409 (schon beantwortet)
 //   DELETE /v1/pair/:pin          → 204
+//
+// Zu viele Anfragen einer IP → 429 (Kopplung 60/min, Sync 120/min).
 
 const SPACE_ID = /^[0-9a-f]{64}$/;
 const PIN = /^[0-9]{6}$/;
@@ -34,6 +36,14 @@ async function route(request, env) {
   const url = new URL(request.url);
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts[0] !== "v1") return json({ error: "not_found" }, 404);
+
+  // Ratenbegrenzung pro IP: Kopplungen streng (PINs nicht durchprobierbar), Sync großzügig.
+  const limiter = parts[1] === "pair" ? env.PAIR_LIMITER : env.SPACE_LIMITER;
+  if (limiter) {
+    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+    const { success } = await limiter.limit({ key: ip });
+    if (!success) return json({ error: "rate_limited" }, 429, { "Retry-After": "60" });
+  }
 
   if (parts[1] === "space" && parts.length === 3) {
     const id = parts[2];

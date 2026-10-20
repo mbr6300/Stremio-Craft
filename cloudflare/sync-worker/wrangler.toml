@@ -6,3 +6,15 @@ compatibility_date = "2025-09-01"
 binding = "DB"
 database_name = "stremio-craft-sync"
 database_id = "7311ae8a-2c31-46d3-b1dd-e97646b5e35a"
+
+# Ratenbegrenzung pro IP (eingebaut in Workers, funktioniert auch unter workers.dev).
+# Kopplungs-PINs knapp halten, damit niemand PINs durchprobieren kann.
+[[ratelimits]]
+name = "PAIR_LIMITER"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "SPACE_LIMITER"
+namespace_id = "1002"
+simple = { limit = 120, period = 60 }

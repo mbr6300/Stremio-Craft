@@ -21,4 +21,13 @@ check "zweite Antwort → 409" "$(status -X PUT -d '{"payload":"other"}' "$BASE/
 check "Kopplung löschen → 204" "$(status -X DELETE "$BASE/v1/pair/$PIN")" 204
 check "gelöschte Kopplung → 404" "$(status "$BASE/v1/pair/$PIN")" 404
 check "Space löschen → 204" "$(status -X DELETE "$BASE/v1/space/$ID")" 204
+if [ "$2" = "--rate-limit" ]; then
+  # Absichtlich zu viele Kopplungsanfragen: nach gut 60 pro Minute kommt 429
+  # (Cloudflare zählt pro Rechenzentrum und setzt mit kurzer Verzögerung durch).
+  LIMITED=0
+  for i in $(seq 1 150); do
+    [ "$(status "$BASE/v1/pair/000000")" = "429" ] && LIMITED=1 && break
+  done
+  check "Ratenbegrenzung Kopplung → 429" "$LIMITED" 1
+fi
 [ -z "$FAILED" ] && echo "Alle Tests bestanden."

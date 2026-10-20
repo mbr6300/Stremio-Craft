@@ -35,7 +35,9 @@ sh test.sh
 Simulatoren erreichen den lokalen Worker unter `http://127.0.0.1:8787`
 (in der App als Sync-Server eintragen oder per Startargument `-syncServerURL http://127.0.0.1:8787`).
 
-## Empfehlung
+## Ratenbegrenzung
 
-Im Cloudflare-Dashboard eine Rate-Limiting-Regel für den Worker anlegen (z. B. 60 Anfragen pro Minute
-und IP), damit niemand PINs durchprobieren kann.
+Eingebaut über die Workers-Rate-Limit-Bindings in `wrangler.toml` (auch unter `workers.dev` wirksam,
+Dashboard-WAF-Regeln gehen dort nicht): Kopplung 60, Sync 120 Anfragen pro Minute und IP. Darüber
+antwortet der Worker mit `429`. `sh test.sh <URL> --rate-limit` prüft das – danach ist die Kopplung
+für die eigene IP eine Minute gesperrt.
