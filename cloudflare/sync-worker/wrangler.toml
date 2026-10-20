@@ -5,5 +5,4 @@ compatibility_date = "2025-09-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "stremio-craft-sync"
-# Nach `npx wrangler d1 create stremio-craft-sync` die ausgegebene ID hier eintragen.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "7311ae8a-2c31-46d3-b1dd-e97646b5e35a"
