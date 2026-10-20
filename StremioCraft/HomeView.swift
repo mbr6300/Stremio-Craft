@@ -34,15 +34,17 @@ struct HomeView: View {
                 HStack(alignment: .bottom, spacing: Theme.s(40)) {
                     HeroInfo(fallback: fallback)
                     Spacer(minLength: 0)
-                    FilterPicker()
                 }
                 .frame(height: Theme.s(165), alignment: .bottom)
                 .padding(.horizontal, Theme.pagePadding)
                 .padding(.bottom, Theme.headerGap)
                 ShelvesList()
             }
-            // Ganz oben rechts, auf Höhe des Menü-Knopfs links.
+            // Ganz oben rechts, auf Höhe des Menü-Knopfs links. Filter, Region und Profil in einer
+            // Zeile und einem Fokusbereich: nach oben landet man hier, links/rechts wechselt.
             HStack(spacing: Theme.s(16)) {
+                FilterPicker()
+                    .padding(.trailing, Theme.s(16))
                 RegionMenu()
                 ActiveProfileBadge()
             }
@@ -216,11 +218,14 @@ private struct FilterPicker: View {
         // schaltete man so versehentlich um. Knöpfe wechseln erst beim Klicken.
         HStack(spacing: Theme.s(12)) {
             ForEach(MediaFilter.allCases) { option in
-                Button(option.label) { filter = option }
-                    .buttonStyle(PillButtonStyle(selected: filter == option))
+                Button { filter = option } label: {
+                    // Gleiche Höhe wie Region- und Profil-Bubble daneben.
+                    Text(option.label)
+                        .frame(height: Theme.pillContentHeight)
+                }
+                .buttonStyle(PillButtonStyle(selected: filter == option))
             }
         }
-        .tvFocusSection()
         #else
         Picker("Anzeigen", selection: $filter) {
             ForEach(MediaFilter.allCases) { Text($0.label).tag($0) }

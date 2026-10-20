@@ -223,9 +223,9 @@ final class SyncService {
             guard let newVersion = try await client.store(space: code.spaceID, expectedVersion: remoteVersion, blob: blob) else {
                 return false
             }
-            saveBase(merged, version: newVersion)
+            try saveBase(merged, version: newVersion)
         } else {
-            saveBase(merged, version: remoteVersion)
+            try saveBase(merged, version: remoteVersion)
         }
         devices = sorted(merged.devices ?? [])
         pendingRemovals = []
@@ -291,7 +291,14 @@ final class SyncService {
     // MARK: - Basis (zuletzt gemeinsamer Stand)
 
     private static var baseURL: URL {
+        #if os(tvOS)
+        // Auf dem Apple TV dürfen Apps nur in den Cache-Ordner schreiben; „Application Support“
+        // klappt nur im Simulator. Ohne gespeicherte Basis galt jeder Abgleich als erstes
+        // Verbinden – entfernte Titel kamen dann vom Server zurück.
+        URL.cachesDirectory.appending(path: "StremioCraft/sync-base.json")
+        #else
         URL.applicationSupportDirectory.appending(path: "StremioCraft/sync-base.json")
+        #endif
     }
 
     private func loadBase() -> SyncSnapshot? {
@@ -299,13 +306,18 @@ final class SyncService {
         return try? JSONDecoder().decode(SyncSnapshot.self, from: data)
     }
 
-    private func saveBase(_ snapshot: SyncSnapshot, version: Int) {
+    /// Ohne gespeicherte Basis kann kein Entfernen erkannt werden – Fehler deshalb nicht verschlucken.
+    private func saveBase(_ snapshot: SyncSnapshot, version: Int) throws {
         let url = Self.baseURL
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        // Enthält den Real-Debrid-Token – wo möglich mit Dateischutz ablegen.
-        if let data = try? JSONEncoder().encode(snapshot),
-           (try? data.write(to: url, options: [.atomic, .completeFileProtection])) == nil {
-            try? data.write(to: url, options: .atomic)
+        let data = try JSONEncoder().encode(snapshot)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Enthält den Real-Debrid-Token – wo möglich mit Dateischutz ablegen.
+            if (try? data.write(to: url, options: [.atomic, .completeFileProtection])) == nil {
+                try data.write(to: url, options: .atomic)
+            }
+        } catch {
+            throw AppFailure.message("Sync-Stand konnte nicht gespeichert werden: \(error.localizedDescription)")
         }
         defaults.set(version, forKey: versionKey)
     }
