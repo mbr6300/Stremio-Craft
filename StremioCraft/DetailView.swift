@@ -438,6 +438,13 @@ private struct EpisodeCard: View {
                 Text("\(episode.episodeNumber). \(episode.name)")
                     .font(.system(size: Theme.s(22), weight: .semibold))
                     .lineLimit(1)
+                if let date = episode.airDateText {
+                    // Kommende Folgen orange („ab …“), bereits erschienene dezent grau.
+                    Label(episode.isAired ? date : "Ab \(date)", systemImage: episode.isAired ? "calendar" : "calendar.badge.clock")
+                        .font(.system(size: Theme.s(17), weight: episode.isAired ? .regular : .semibold))
+                        .foregroundStyle(episode.isAired ? Color.white.opacity(0.55) : Color.orange)
+                        .lineLimit(1)
+                }
                 Text(episode.overview.isEmpty ? episode.label : episode.overview)
                     .font(.system(size: Theme.s(18)))
                     .foregroundStyle(.white.opacity(0.55))

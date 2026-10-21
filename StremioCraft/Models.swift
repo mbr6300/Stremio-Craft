@@ -48,6 +48,15 @@ struct EpisodeInfo: Identifiable, Hashable {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return airDate <= formatter.string(from: Date())
     }
+    /// Ausstrahlungsdatum lesbar, z. B. „12. März 2026“.
+    var airDateText: String? {
+        guard let airDate, airDate.count >= 10 else { return nil }
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM-dd"
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        guard let date = parser.date(from: String(airDate.prefix(10))) else { return nil }
+        return date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "de_CH")))
+    }
     var label: String { String(format: "S%02dE%02d", seasonNumber, episodeNumber) }
 }
 
