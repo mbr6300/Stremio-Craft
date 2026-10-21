@@ -47,6 +47,8 @@ final class HeroState {
     var shelfID: String?
     /// Zählt jeden Fokuswechsel in den Regalen – Anlass, die Reihe erneut auszurichten.
     var focusTick = 0
+    /// Liste steht ganz oben (oberste Reihe ausgerichtet). Nur dann führt „hoch“ in die Kopfzeile.
+    var atTop = true
 
     /// Von Postern und „Alle anzeigen“ aufgerufen, wenn sie den Fokus bekommen.
     func report(item: MediaItem?, shelfID: String?) {
@@ -79,7 +81,7 @@ struct ShelvesScroll<Content: View>: View {
     /// das lief zeitverzögert nach der eigenen Ausrichtung und schob die Reihe nach unten.
     /// Mit diesem Vorlauf liegt die ausgerichtete Reihe weit genug vom Rand, tvOS hat nichts
     /// mehr zu korrigieren, und Hoch/Runter funktioniert trotzdem über das normale Fokus-Scrollen.
-    static var overlap: CGFloat { 180 }
+    static var overlap: CGFloat { 100 }
 
     @State private var viewportHeight: CGFloat = 0
     @State private var shelfHeights: [String: CGFloat] = [:]
@@ -108,6 +110,7 @@ struct ShelvesScroll<Content: View>: View {
             }
             .environment(\.shelfHeights, $shelfHeights)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+            .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y < 40 } action: { _, top in hero.atTop = top }
             .topFadeMask(hidden: Self.overlap)
             .padding(.top, -Self.overlap)
             // Fokussierte Reihe immer an dieselbe Stelle, `overlap` unter dem versteckten Rand.
@@ -458,8 +461,7 @@ struct Shelf<Content: View>: View {
         .environment(\.shelfID, shelfID)
     }
 
-    @Environment(\.shelfHeights) private var shelfHeights
-}
+    @Environment(\.shelfHeights) private var shelfHeights}
 
 private struct ShelfHeightsKey: EnvironmentKey {
     static let defaultValue: Binding<[String: CGFloat]>? = nil

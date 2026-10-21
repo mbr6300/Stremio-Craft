@@ -40,19 +40,23 @@ struct HomeView: View {
                 .padding(.bottom, Theme.headerGap)
                 ShelvesList()
             }
-            // Ganz oben rechts, auf Höhe des Menü-Knopfs links. Filter, Region und Profil in einer
-            // Zeile und einem Fokusbereich: nach oben landet man hier, links/rechts wechselt.
+            // Ganz oben rechts: Filter, Region und Profil in einer Zeile und einem Fokusbereich über
+            // die volle Breite. Die Zeile bleibt im sicheren Bereich (darüber liegt die Zone der
+            // tvOS-Seitenleiste, dort fand der Fokus die Nachbarknöpfe nicht) und oberhalb der
+            // Reihen-Scrollansicht, die um `ShelvesScroll.overlap` in den Kopf hinaufragt.
             HStack(spacing: Theme.s(16)) {
+                Spacer(minLength: 0)
                 FilterPicker()
                     .padding(.trailing, Theme.s(16))
                 RegionMenu()
                 ActiveProfileBadge()
             }
-                .padding(.trailing, Theme.pagePadding)
-                .padding(.top, Theme.s(48))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .ignoresSafeArea(edges: .top)
+                .padding(.horizontal, Theme.pagePadding)
+                // Aus einer tieferen Reihe soll „hoch“ in die Reihe darüber führen, nicht hierher –
+                // sonst überspringt der Fokus eine kurze oberste Reihe (z. B. „Meine Liste“).
+                .disabled(!hero.atTop)
                 .tvFocusSection()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 }
