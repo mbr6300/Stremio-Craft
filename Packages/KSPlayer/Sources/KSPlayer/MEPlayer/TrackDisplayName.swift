@@ -24,7 +24,38 @@ public func subtitleMenuTitle(_ info: any SubtitleInfo) -> String {
     (info as? FFmpegAssetTrack)?.readableSubtitleTitle ?? info.name
 }
 
+/// Index der bevorzugten Tonspur in einer Sprache (z. B. „en“): normale Spur vor Kommentar
+/// oder Audiodeskription. `nil`, wenn es keine Spur in dieser Sprache gibt.
+public func preferredAudioIndex(_ tracks: [MediaPlayerTrack], language: String) -> Int? {
+    let candidates = tracks.indices.filter { (tracks[$0] as? FFmpegAssetTrack)?.matches(language: language) == true }
+    return candidates.first { (tracks[$0] as? FFmpegAssetTrack)?.purposeTitle == nil } ?? candidates.first
+}
+
+/// Bevorzugte Untertitel in einer Sprache: vollständige vor „nur fremdsprachige Stellen“,
+/// normale vor solchen für Hörgeschädigte; Kommentar-Untertitel zuletzt.
+public func preferredSubtitle(_ infos: [any SubtitleInfo], language: String) -> (any SubtitleInfo)? {
+    let tracks = infos.compactMap { $0 as? FFmpegAssetTrack }.filter { $0.matches(language: language) }
+    func rank(_ track: FFmpegAssetTrack) -> Int {
+        let title = track.readableSubtitleTitle
+        if title.contains("Kommentar") { return 3 }
+        if title.contains("Nur ") { return 2 }
+        return title.contains("Hörgeschädigte") ? 1 : 0
+    }
+    return tracks.min { rank($0) < rank($1) }
+}
+
 extension FFmpegAssetTrack {
+    /// Sprache anhand des Codes (ISO 639-1/-2, z. B. „en“/„eng“) oder notfalls des Titels.
+    func matches(language: String) -> Bool {
+        let english = Locale(identifier: "en_US_POSIX")
+        guard let name = english.localizedString(forLanguageCode: language)?.lowercased() else { return false }
+        if let code = languageCode?.lowercased(), !code.isEmpty, code != "und" {
+            // ISO 639-2 („eng“) und 639-1 („en“) über den Sprachnamen vergleichen.
+            return code == language || english.localizedString(forLanguageCode: code)?.lowercased() == name
+        }
+        return title?.lowercased().contains(name) == true
+    }
+
     var readableAudioTitle: String {
         guard mediaType == .audio else { return name }
         var parts = [languageName ?? metadataTitle ?? "Unbekannte Sprache", formatTitle]
@@ -116,7 +147,7 @@ extension FFmpegAssetTrack {
     }
 
     /// Besondere Spuren erkennbar machen (Kommentar, Audiodeskription).
-    private var purposeTitle: String? {
+    var purposeTitle: String? {
         guard let title = metadataTitle?.lowercased() else { return nil }
         if title.contains("comment") || title.contains("kommentar") { return "Kommentar" }
         if title.contains("descri") || title.contains("audiodeskription") || title.contains("hörfilm") {

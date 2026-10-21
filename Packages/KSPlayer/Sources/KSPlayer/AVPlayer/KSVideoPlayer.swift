@@ -228,7 +228,8 @@ extension KSVideoPlayer.Coordinator: KSPlayerLayerDelegate {
                     guard let self else { return }
                     self.subtitleModel.addSubtitle(dataSouce: subtitleDataSouce)
                     if self.subtitleModel.selectedSubtitleInfo == nil, layer.options.autoSelectEmbedSubtitle {
-                        self.subtitleModel.selectedSubtitleInfo = subtitleDataSouce.infos.first { $0.isEnabled }
+                        self.subtitleModel.selectedSubtitleInfo = layer.options.wantedSubtitle(infos: subtitleDataSouce.infos)
+                            ?? subtitleDataSouce.infos.first { $0.isEnabled }
                     }
                 }
             }

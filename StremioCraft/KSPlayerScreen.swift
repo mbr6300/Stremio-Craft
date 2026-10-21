@@ -19,7 +19,7 @@ struct KSPlayerScreen: View {
         // FFmpeg für alle Formate, damit Ton- und Untertitelspuren überall gleich funktionieren.
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = nil
-        let options = KSOptions()
+        let options = EnglishTrackOptions()
         if resume > 1 { options.startPlayTime = resume }
         return options
     }
@@ -45,6 +45,18 @@ struct KSPlayerScreen: View {
                 if position > 0 { onProgress(position, duration) }
                 coordinator.resetPlayer()
             }
+    }
+}
+
+/// Startet mit englischem Ton und englischen Untertiteln, sofern vorhanden; sonst die Standardwahl.
+/// Im Player-Menü lässt sich beides weiterhin umstellen.
+private final class EnglishTrackOptions: KSOptions {
+    override func wantedAudio(tracks: [MediaPlayerTrack]) -> Int? {
+        preferredAudioIndex(tracks, language: "en")
+    }
+
+    override func wantedSubtitle(infos: [any SubtitleInfo]) -> (any SubtitleInfo)? {
+        preferredSubtitle(infos, language: "en")
     }
 }
 #endif

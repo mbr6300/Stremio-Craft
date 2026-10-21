@@ -230,6 +230,11 @@ open class KSOptions {
         nil
     }
 
+    /// Stremio Craft: gewünschte eingebettete Untertitel beim Start, oder nil für die Standardwahl.
+    open func wantedSubtitle(infos _: [any SubtitleInfo]) -> (any SubtitleInfo)? {
+        nil
+    }
+
     open func videoFrameMaxCount(fps _: Float, naturalSize _: CGSize, isLive: Bool) -> UInt8 {
         isLive ? 4 : 16
     }

@@ -14,3 +14,6 @@ Stand `da0c29a40087fbc471e1119f2140ea21d4c9791c` von https://github.com/kingslay
 - Info-Fenster (`VideoSettingView` in `SwiftUI/KSVideoPlayerView.swift`): unter Mac Catalyst in einen
   `NavigationStack` gesetzt, damit „Fertig“/„Schliessen“ (Return/Esc) sichtbar sind; Angaben auf Deutsch;
   die fest auf Chinesisch eingestellte Untertitelsuche entfernt.
+- Spur-Vorauswahl: `KSOptions.wantedSubtitle(infos:)` (neu, genutzt in `AVPlayer/KSVideoPlayer.swift`) sowie
+  `preferredAudioIndex`/`preferredSubtitle` in `MEPlayer/TrackDisplayName.swift`, damit die App eine Sprache für
+  Ton und Untertitel vorwählen kann.
