@@ -31,8 +31,24 @@ in keiner Reihe und keinem Raster. Titel ohne bekannte Bewertung sichtbar lassen
 nicht verschwinden.
 
 ### Empfehlungslogik verbessern
-„Empfohlen für dich“ soll treffender werden. Offen zu klären: was heute nicht passt (Beispiele sammeln),
-dann Gewichte und Ähnlichkeit im Worker (`cloudflare/sync-worker/src/recommend.js`) nachschärfen.
+„Empfohlen für dich“ soll treffender werden (Worker `cloudflare/sync-worker/src/recommend.js`, Import in
+`catalog.js`). Heute zieht eine gemeinsame Filmreihe am stärksten (Gewicht 3) – darum landen schwache
+Fortsetzungen weit oben.
+- Fortsetzungen nur, wenn sie mithalten: späterer Teil höchstens ~0.5 unter dem besten Teil der Reihe,
+  sonst nicht vorschlagen (braucht Teil-Nummer bzw. Erscheinungsreihenfolge innerhalb der Reihe).
+- Reihenfolge beachten: Teil 3 erst, wenn Teil 2 gesehen ist; ohne gesehenen Teil den ersten (oder
+  besten) Teil vorschlagen.
+- Reihe als Merkmal schwächer gewichten; Themen, Regie und Stimmung zählen mehr.
+- Zweite Quelle „Leute, die das mochten, mochten auch …“: TMDB-Empfehlungen der wichtigsten
+  Ausgangstitel als zusätzliche Kandidaten mit Bonus (beim Import pro Titel speichern oder im Worker
+  abfragen).
+- Nichtssagende Stichworte ignorieren (z. B. „based on novel“, „sequel“, „duringcreditsstinger“) bzw.
+  sehr häufige Stichworte stark abwerten.
+- Geheimtipps einstreuen: ab und zu sehr gut bewertete, weniger bekannte Titel statt immer derselben
+  Blockbuster.
+- Ignoriertes rotieren: Was oft in der Reihe stand und nie geöffnet wurde, rückt nach hinten (App merkt
+  sich pro Profil, wie oft ein Vorschlag gezeigt wurde).
+- Begründung anzeigen: „Weil du *Inception* magst“ an der Karte bzw. im Detail.
 
 ### Empfehlungen „Alle anzeigen“: auch beherzte Titel zeigen
 Oben im Raster der Empfehlungen eine Umschaltung: „Nur neue Vorschläge“ (noch ohne ♥, wie heute)
