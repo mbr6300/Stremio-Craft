@@ -21,6 +21,19 @@ fi
 # Mac Catalyst und iPad teilen sich die Bundle-ID und dürfen keine gleichen Nummern haben.
 STAMP=$(date +%Y%m%d%H%M)
 PLATFORMS=${*:-"tvos ios mac"}
+BUILDS=""
+
+# Jede Auslieferung zählt die letzte Stelle der Version hoch (1.0.2 → 1.0.3). Was neu ist, steht in
+# CHANGELOG.md unter „## Unveröffentlicht“ – ohne Eintrag wird nichts hochgeladen.
+PROJECT=StremioCraft.xcodeproj/project.pbxproj
+CURRENT=$(sed -n 's/.*MARKETING_VERSION = \(.*\);/\1/p' "$PROJECT" | head -1)
+VERSION=$(echo "$CURRENT" | awk -F. '{ printf "%d.%d.%d", $1, $2, $3 + 1 }')
+NOTES=$(awk '/^## / { on = ($0 == "## Unveröffentlicht"); next } on' CHANGELOG.md | sed '/^[[:space:]]*$/d')
+if [ -z "$NOTES" ]; then
+  echo "CHANGELOG.md: unter „## Unveröffentlicht“ fehlen die Neuerungen für Version $VERSION." >&2
+  exit 1
+fi
+echo "Version $CURRENT → $VERSION"
 
 xc() {
   xcodebuild "$@" \
@@ -57,12 +70,13 @@ upload() {
   echo "▶︎ $name: Archiv (Build $BUILD)"
   xc -project StremioCraft.xcodeproj -scheme StremioCraft -configuration Release \
      -destination "$destination" -archivePath "$archive" -derivedDataPath build/archive \
-     CURRENT_PROJECT_VERSION="$BUILD" archive -quiet
+     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" archive -quiet
   [ "$name" = Mac ] && strip_ffmpeg_stubs "$archive"
   echo "▶︎ $name: Upload zu App Store Connect"
   xc -exportArchive -archivePath "$archive" -exportPath "build/export/$name-$BUILD" \
      -exportOptionsPlist BuildSupport/ExportOptions-TestFlight.plist
   echo "✓ $name hochgeladen"
+  BUILDS="$BUILDS $BUILD"
 }
 
 for platform in $PLATFORMS; do
@@ -74,8 +88,19 @@ for platform in $PLATFORMS; do
   esac
 done
 
-# Neue Teammitglieder (z. B. nach testflight-invite.swift) in die Gruppe „Familie“ übernehmen.
-echo "▶︎ Testgruppe „Familie“ aktualisieren"
-swift scripts/testflight-setup.swift || echo "  (Gruppe konnte nicht aktualisiert werden – später erneut ausführen)"
+# Erst nach erfolgreichem Upload: Version im Projekt festhalten, Changelog-Abschnitt zur Version machen.
+sed -i '' "s/MARKETING_VERSION = $CURRENT;/MARKETING_VERSION = $VERSION;/" "$PROJECT"
+awk -v heading="## $VERSION – $(date +%Y-%m-%d)" '{ print } $0 == "## Unveröffentlicht" { print ""; print heading }' \
+  CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+echo "✓ Version $VERSION in Projekt und CHANGELOG.md eingetragen (noch committen)"
+
+# Neue Teammitglieder (z. B. nach testflight-invite.swift) in die Gruppe „Familie“ übernehmen und
+# die Neuerungen als „Was ist zu testen?“ bei den neuen Builds eintragen.
+echo "▶︎ Testgruppe „Familie“ aktualisieren, Neuerungen eintragen"
+mkdir -p build
+printf '%s\n' "$NOTES" > build/whatsnew.txt
+# shellcheck disable=SC2086 # BUILDS ist bewusst eine Liste
+swift scripts/testflight-setup.swift --notes build/whatsnew.txt $BUILDS \
+  || echo "  (TestFlight konnte nicht aktualisiert werden – später erneut ausführen)"
 
 echo "Fertig. Die Builds erscheinen nach der Verarbeitung (meist 5–15 Minuten) in TestFlight."

@@ -98,4 +98,43 @@ for user in items(try await call("GET", "/v1/users?limit=200")) {
     ]])
     print("✓ Tester hinzugefügt: \(a["firstName"] ?? "") \(a["lastName"] ?? "")")
 }
+
+// 4. „Was ist zu testen?“ für eben hochgeladene Builds (--notes DATEI BUILD…). Die Builds tauchen erst
+//    nach ein paar Minuten in App Store Connect auf, darum bis zu 15 Minuten nachfragen.
+let arguments = CommandLine.arguments
+if let index = arguments.firstIndex(of: "--notes"), arguments.count > index + 1 {
+    let notes = try String(contentsOfFile: arguments[index + 1], encoding: .utf8)
+    let locale = attr(app)["primaryLocale"] as? String ?? "de-DE"
+    var pending = Set(arguments.dropFirst(index + 2))
+    let deadline = Date().addingTimeInterval(15 * 60)
+    while !pending.isEmpty, Date() < deadline {
+        let versions = pending.sorted().joined(separator: ",")
+        for build in items(try await call("GET", "/v1/builds?filter[app]=\(appID)&filter[version]=\(versions)")) {
+            guard let id = build["id"] as? String, let version = attr(build)["version"] as? String else { continue }
+            do {
+                let existing = items(try await call("GET", "/v1/builds/\(id)/betaBuildLocalizations"))
+                    .first { attr($0)["locale"] as? String == locale }
+                if let localizationID = existing?["id"] as? String {
+                    try await call("PATCH", "/v1/betaBuildLocalizations/\(localizationID)", ["data": [
+                        "type": "betaBuildLocalizations", "id": localizationID, "attributes": ["whatsNew": notes]
+                    ]])
+                } else {
+                    try await call("POST", "/v1/betaBuildLocalizations", ["data": [
+                        "type": "betaBuildLocalizations",
+                        "attributes": ["locale": locale, "whatsNew": notes],
+                        "relationships": ["build": ["data": ["type": "builds", "id": id]]]
+                    ]])
+                }
+                pending.remove(version)
+                print("✓ Neuerungen eingetragen: Build \(version)")
+            } catch {
+                // Build noch in Verarbeitung – in der nächsten Runde erneut versuchen.
+            }
+        }
+        if !pending.isEmpty { try await Task.sleep(for: .seconds(30)) }
+    }
+    if !pending.isEmpty {
+        print("⚠︎ Neuerungen nicht eingetragen für: \(pending.sorted().joined(separator: ", ")) – später mit --notes erneut ausführen")
+    }
+}
 print("Fertig.")
