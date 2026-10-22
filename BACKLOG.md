@@ -25,6 +25,19 @@ Watchlist und Verlauf mit Trakt abgleichen, damit auch andere Apps den Stand ken
 Reihe „Ähnlich wie …“ unter der Detailansicht, aus der eigenen Titeldatenbank (Worker `/v1/recommend`
 mit dem Titel als einzigem Ausgangspunkt).
 
+### Mindestbewertung als Filter für alle Listen
+Einstellung „Titel unter IMDb … ausblenden“ (Standard 6.0): Titel mit tieferer IMDb-Bewertung erscheinen
+in keiner Reihe und keinem Raster. Titel ohne bekannte Bewertung sichtbar lassen, damit Neuerscheinungen
+nicht verschwinden.
+
+### Empfehlungslogik verbessern
+„Empfohlen für dich“ soll treffender werden. Offen zu klären: was heute nicht passt (Beispiele sammeln),
+dann Gewichte und Ähnlichkeit im Worker (`cloudflare/sync-worker/src/recommend.js`) nachschärfen.
+
+### Empfehlungen „Alle anzeigen“: auch beherzte Titel zeigen
+Oben im Raster der Empfehlungen eine Umschaltung: „Nur neue Vorschläge“ (noch ohne ♥, wie heute)
+oder „Mit Lieblingstiteln“ (beherzte Titel dazwischen).
+
 ## Erledigt
 
 - Unveröffentlicht: eigene Titeldatenbank auf Cloudflare (rund 30'000 Filme und Serien, IMDb ab 6.0,
