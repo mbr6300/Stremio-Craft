@@ -14,14 +14,21 @@ Das Umsortieren der Listen ist heute auf Fernbedienung (Hoch/Runter) und Pfeil-K
 (`SettingsView.swift`). Auf dem iPad soll man Einträge mit dem Finger ziehen können; die Pfeile können
 dort entfallen. tvOS-Bedienung bleibt wie sie ist.
 
-### Eigene Filmdatenbank (Top 10'000) als Grundlage für Empfehlungen
-Datenbank mit den bekanntesten rund 10'000 Filmen anlegen. Die Empfehlungsliste greift darauf zurück,
-nicht nur auf das, was Streaming-Anbieter gerade im Angebot haben.
-- Pro Film Metadaten, die für die Auswahllogik taugen: TMDB/IMDb-ID, Titel (de/en), Jahr, Genres,
-  Laufzeit, Bewertung und Stimmenzahl, Popularität, Originalsprache, Produktionsland, Regie,
-  Hauptdarsteller, Stichworte (TMDB-Keywords), Altersfreigabe, Sammlung/Reihe.
-- Offen zu klären: Auswahlkriterium für „die bekanntesten“ (z. B. Stimmenzahl), wo die Daten liegen
-  (in der App mitgeliefert oder über den Sync-Worker), wie oft sie aktualisiert werden.
+### Eigene Titeldatenbank (Top 30'000) auf Cloudflare als Grundlage für Empfehlungen
+Datenbank mit den bekanntesten rund 30'000 Titeln (Filme und Serien) anlegen. Die Empfehlungsliste
+greift darauf zurück, nicht nur auf das, was Streaming-Anbieter gerade im Angebot haben.
+- Liegt auf Cloudflare, nicht in der App: D1-Datenbank mit einem Worker davor (wie der Geräte-Sync);
+  die App fragt nur gefilterte Ausschnitte ab.
+- Befüllt und aktualisiert per geplantem Worker-Lauf (Cron) aus TMDB; der TMDB-Schlüssel bleibt als
+  Secret im Worker.
+- Metadaten für die Auswahllogik, für alle Titel: TMDB/IMDb-ID, Art (Film/Serie), Titel (de/en), Jahr,
+  Genres, Bewertung und Stimmenzahl, Popularität, Originalsprache, Produktionsland, Hauptdarsteller,
+  Stichworte (TMDB-Keywords), Altersfreigabe.
+  - Nur Filme: Laufzeit, Regie, Sammlung/Reihe.
+  - Nur Serien: Status (laufend/beendet), Anzahl Staffeln und Folgen, Sender, erste und letzte
+    Ausstrahlung, Folgenlänge, Schöpfer.
+- Offen zu klären: Auswahlkriterium für „die bekanntesten“ (z. B. Stimmenzahl, getrennte Quoten für
+  Filme und Serien) und wie oft die Daten aktualisiert werden.
 
 ### Ton- und Untertitelsprache einstellbar
 Heute startet der integrierte Player fest mit Englisch (`KSPlayerScreen.swift`). In den Einstellungen
