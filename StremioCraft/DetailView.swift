@@ -56,7 +56,7 @@ struct DetailView: View {
             Text(shown.overview.isEmpty ? "Keine Beschreibung." : shown.overview)
                 .font(.system(size: Theme.s(22)))
                 .foregroundStyle(.white.opacity(0.8))
-                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true) // ganz zeigen, die Seite scrollt
                 .frame(maxWidth: Theme.s(1050), alignment: .leading)
             credits
             if let status {
@@ -180,11 +180,24 @@ struct DetailView: View {
                 autoStart: model.autoPlayBest,
                 durationHint: info?.runtime.map { Double($0 * 60) } ?? saved.duration
             )
-            return ("Fortsetzen · \(String(format: "S%02dE%02d", season, episode))", request)
+            let label = String(format: "S%02dE%02d", season, episode)
+            return (saved.upNext == true ? "Weiter mit \(label)" : "Fortsetzen · \(label)", request)
         }
         // Ohne laufenden Fortschritt: erste noch ungesehene Folge der Staffel.
-        guard let next = episodes.first(where: { !model.isWatched($0, of: shown) }) ?? episodes.first else { return nil }
-        return ("Abspielen · \(next.label)", episodeRequest(next))
+        if let next = episodes.first(where: { !model.isWatched($0, of: shown) }) {
+            return ("Abspielen · \(next.label)", episodeRequest(next))
+        }
+        // Angezeigtes ganz gesehen: mit der nächsten Staffel weiter.
+        if let last = episodes.last,
+           let season = (detail?.seasons ?? []).first(where: { $0.seasonNumber > last.seasonNumber && $0.episodeCount > 0 }) {
+            let request = PlaybackRequest(
+                media: shown, season: season.seasonNumber, episode: 1, episodeTitle: nil, resumeSeconds: 0,
+                autoStart: model.autoPlayBest, durationHint: detail?.runtime.map { Double($0 * 60) }
+            )
+            return ("Weiter mit \(String(format: "S%02dE01", season.seasonNumber))", request)
+        }
+        guard let first = episodes.first else { return nil }
+        return ("Abspielen · \(first.label)", episodeRequest(first))
     }
 
     // MARK: - Gesehen
@@ -229,9 +242,20 @@ struct DetailView: View {
                         selectedSeason = season.seasonNumber
                         Task { await loadEpisodes(season.seasonNumber) }
                     } label: {
-                        Text(season.name)
+                        Text(seasonLabel(season))
                     }
                     .buttonStyle(PillButtonStyle(selected: (highlightedSeason ?? selectedSeason) == season.seasonNumber))
+                    .contextMenu {
+                        let complete = watchedCount(season) >= season.episodeCount
+                        Button {
+                            let keys = (1...max(season.episodeCount, 1)).map { AppModel.episodeKey(shown.tmdbId, season.seasonNumber, $0) }
+                            model.setWatched(keys, !complete)
+                            if !complete { model.clearProgressIfWatched(shown) }
+                        } label: {
+                            Label(complete ? "Staffel als ungesehen markieren" : "Ganze Staffel als gesehen markieren",
+                                  systemImage: complete ? "eye.slash" : "checkmark.circle.fill")
+                        }
+                    }
                 }
             }
             .padding(.horizontal, Theme.pagePadding)
@@ -239,6 +263,19 @@ struct DetailView: View {
         }
         .scrollClipDisabled()
         .tvFocusSection()
+    }
+
+    /// Gesehene Folgen einer Staffel (laut „Gesehen“-Markierungen).
+    private func watchedCount(_ season: SeasonInfo) -> Int {
+        let prefix = "tv-\(shown.tmdbId)-\(season.seasonNumber)-"
+        return model.watched.filter { $0.hasPrefix(prefix) }.count
+    }
+
+    /// „Staffel 2 · 4/10“, ganz gesehen „Staffel 2 ✓“.
+    private func seasonLabel(_ season: SeasonInfo) -> String {
+        let count = watchedCount(season)
+        guard count > 0, season.episodeCount > 0 else { return season.name }
+        return count >= season.episodeCount ? "\(season.name) ✓" : "\(season.name) · \(count)/\(season.episodeCount)"
     }
 
     private var episodeShelf: some View {
@@ -373,7 +410,10 @@ struct DetailView: View {
                 trailers = (try? await TMDBClient.fetchTrailers(apiKey: key, tmdbId: item.tmdbId, mediaType: item.normalizedType)) ?? []
             }
             if loaded.media.normalizedType == "tv" {
-                let season = saved?.season ?? loaded.seasons.first?.seasonNumber ?? 1
+                // Ohne laufenden Fortschritt bei der ersten Staffel einsteigen, die noch nicht ganz gesehen ist.
+                let regular = loaded.seasons.filter { $0.seasonNumber > 0 }
+                let unfinished = regular.first { watchedCount($0) < $0.episodeCount }
+                let season = saved?.season ?? unfinished?.seasonNumber ?? regular.first?.seasonNumber ?? loaded.seasons.first?.seasonNumber ?? 1
                 selectedSeason = season
                 await loadEpisodes(season)
             }

@@ -19,6 +19,8 @@ final class AppModel {
     private let recentSearchesKey = "recentSearches"
     private let playerKey = "playerChoice"
     private let autoPlayKey = "autoPlayBest"
+    private let streamPreferencesKey = "streamPreferences"
+    private let streamMemoryKey = "streamMemory"
     private let profilesKey = "profiles"
     private let activeProfileKey = "activeProfile"
     private let zoomKey = "uiZoom"
@@ -36,6 +38,10 @@ final class AppModel {
     var catalogs: [CatalogEntry] = CatalogEntry.defaults
     var player: PlayerChoice = .platformDefault
     var autoPlayBest = true
+    /// Regeln für die Stream-Vorauswahl (für alle Profile, wird synchronisiert).
+    private(set) var streamPreferences = StreamPreferences()
+    /// Zuletzt gewählter Stream je Serie ("tv-<id>"), nur auf diesem Gerät.
+    @ObservationIgnored private var streamMemory: [String: StreamMemory] = [:]
     var continueWatching: [WatchProgress] = []
     var favorites: [FavoriteItem] = []
     var rows: [CatalogRow] = []
@@ -117,6 +123,14 @@ final class AppModel {
         defaults.set(CatalogEntry.defaultsVersion, forKey: catalogsVersionKey)
         player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .platformDefault
         autoPlayBest = defaults.object(forKey: autoPlayKey) as? Bool ?? true
+        if let data = defaults.data(forKey: streamPreferencesKey),
+           let stored = try? JSONDecoder().decode(StreamPreferences.self, from: data) {
+            streamPreferences = stored
+        }
+        if let data = defaults.data(forKey: streamMemoryKey),
+           let stored = try? JSONDecoder().decode([String: StreamMemory].self, from: data) {
+            streamMemory = stored
+        }
         zoom = defaults.object(forKey: zoomKey) as? Double ?? Zoom.standard
         showHelp = !defaults.bool(forKey: helpSeenKey)
         Theme.zoom = zoom
@@ -913,6 +927,28 @@ final class AppModel {
         defaults.set(autoPlay, forKey: autoPlayKey)
     }
 
+    func saveStreamPreferences(_ preferences: StreamPreferences) {
+        guard preferences != streamPreferences else { return }
+        streamPreferences = preferences
+        save(preferences, key: streamPreferencesKey)
+    }
+
+    func streamMemory(for media: MediaItem) -> StreamMemory? {
+        media.normalizedType == "tv" ? streamMemory[media.id] : nil
+    }
+
+    /// Bei Serien merken, welcher Stream gewählt wurde – die nächsten Folgen bevorzugen Ähnliches.
+    func rememberStream(_ stream: StreamCandidate, for media: MediaItem) {
+        guard media.normalizedType == "tv" else { return }
+        streamMemory[media.id] = StreamPicker.memory(for: stream)
+        save(streamMemory, key: streamMemoryKey)
+    }
+
+    /// Startsprachen des integrierten Players für das aktive Profil.
+    var playbackLanguages: (audio: String, subtitle: String) {
+        (activeProfile?.audioLanguage ?? PlaybackLanguage.defaultCode, activeProfile?.subtitleLanguage ?? PlaybackLanguage.defaultCode)
+    }
+
     func setRealDebridToken(_ token: String?) throws {
         if let token, !token.isEmpty {
             try KeychainStore.saveToken(token)
@@ -966,7 +1002,8 @@ extension AppModel {
             catalogs: catalogs,
             country: country,
             torrentio: torrentio,
-            realDebridToken: KeychainStore.loadToken()
+            realDebridToken: KeychainStore.loadToken(),
+            streamPreferences: streamPreferences
         )
     }
 
@@ -1014,6 +1051,7 @@ extension AppModel {
             loadCatalogsIfNeeded()
         }
         if let country = snapshot.country { setCountry(country) }
+        if let preferences = snapshot.streamPreferences { saveStreamPreferences(preferences) }
         if let torrentio = snapshot.torrentio, torrentio != self.torrentio {
             self.torrentio = torrentio
             save(torrentio, key: torrentioKey)

@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var language = ""
     @State private var player: PlayerChoice = .platformDefault
     @State private var autoPlay = true
+    @State private var streamPrefs = StreamPreferences()
     @State private var tokenDraft = ""
     @State private var status = ""
     @State private var isBusy = false
@@ -48,6 +49,33 @@ struct SettingsView: View {
                 Text("Wiedergabe")
             } footer: {
                 Text("Der integrierte Player spielt MKV und MP4 mit allen Ton- und Untertitelspuren und merkt sich die Position für „Weiterschauen“ selbst. Infuse kann zusätzlich Dolby Vision und Atmos am besten ausgeben und meldet die Position beim Schliessen zurück. VLC spielt fast alle Formate, startet aber immer von vorne und meldet keine Position.")
+            }
+
+            Section {
+                Picker("Höchste Auflösung", selection: $streamPrefs.maxResolution) {
+                    Text("Egal").tag(Int?.none)
+                    Text("4K").tag(Int?.some(2160))
+                    Text("1080p").tag(Int?.some(1080))
+                    Text("720p").tag(Int?.some(720))
+                }
+                Picker("HDR / Dolby Vision", selection: $streamPrefs.hdr) {
+                    Text("Egal").tag(StreamPreferences.HDR.any)
+                    Text("Bevorzugen").tag(StreamPreferences.HDR.prefer)
+                    Text("Vermeiden").tag(StreamPreferences.HDR.avoid)
+                }
+                Picker("Grösste Datei", selection: $streamPrefs.maxSizeGB) {
+                    Text("Egal").tag(Double?.none)
+                    ForEach([5.0, 10, 20, 40], id: \.self) { Text("\(Int($0)) GB").tag(Double?.some($0)) }
+                }
+                Picker("Sprache im Release", selection: $streamPrefs.language) {
+                    Text("Egal").tag(String?.none)
+                    Text("Deutsch").tag(String?.some("de"))
+                    Text("Englisch").tag(String?.some("en"))
+                }
+            } header: {
+                Text("Stream-Auswahl")
+            } footer: {
+                Text("Sofort verfügbare Streams kommen immer zuerst; danach ordnen diese Regeln die Liste und bestimmen, welcher Stream automatisch startet. Bei Serien bevorzugt die App ausserdem die Gruppe und Auflösung, die du zuletzt gewählt hast.")
             }
 
             Section {
@@ -111,6 +139,7 @@ struct SettingsView: View {
         .onChange(of: sort) { saveOptions() }
         .onChange(of: player) { model.savePlayer(player, autoPlay: autoPlay) }
         .onChange(of: autoPlay) { model.savePlayer(player, autoPlay: autoPlay) }
+        .onChange(of: streamPrefs) { if loaded { model.saveStreamPreferences(streamPrefs) } }
         .onSubmit(saveOptions)
     }
 
@@ -153,6 +182,7 @@ struct SettingsView: View {
         language = model.torrentio.language
         player = model.player
         autoPlay = model.autoPlayBest
+        streamPrefs = model.streamPreferences
     }
 
     private func saveOptions() {

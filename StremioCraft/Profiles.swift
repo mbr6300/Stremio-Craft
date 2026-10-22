@@ -23,8 +23,22 @@ struct Profile: Codable, Identifiable, Hashable {
     var avatar: Avatar
     /// Vorlieben für die Empfehlungen; fehlt bei älteren Profilen.
     var preferences: TastePreferences?
+    /// Startwahl im integrierten Player (ISO 639-1); `nil` = Englisch. Ton "original" = Spur der Datei,
+    /// Untertitel "off" = keine.
+    var audioLanguage: String?
+    var subtitleLanguage: String?
 
     static let maxCount = 6
+}
+
+/// Sprachwahl für Ton und Untertitel im integrierten Player.
+enum PlaybackLanguage {
+    static let defaultCode = "en"
+    static let original = "original"
+    static let off = "off"
+    static let choices: [(code: String, name: String)] = [
+        ("de", "Deutsch"), ("en", "Englisch"), ("fr", "Französisch"), ("es", "Spanisch"), ("it", "Italienisch")
+    ]
 }
 
 struct AvatarView: View {
@@ -250,6 +264,16 @@ struct ProfileEditView: View {
                     }
                 }
                 .tvFocusSection()
+                LanguageChoices(
+                    title: "Ton im integrierten Player",
+                    extra: (PlaybackLanguage.original, "Original"),
+                    selection: $profile.audioLanguage
+                )
+                LanguageChoices(
+                    title: "Untertitel",
+                    extra: (PlaybackLanguage.off, "Aus"),
+                    selection: $profile.subtitleLanguage
+                )
                 TastePreferencesEditor(preferences: Binding(
                     get: { profile.preferences ?? TastePreferences() },
                     set: { profile.preferences = $0 }
@@ -291,6 +315,32 @@ struct ProfileEditView: View {
                 .scaleEffect(isFocused ? 1.12 : 1)
                 .animation(.easeOut(duration: 0.15), value: isFocused)
         }
+    }
+}
+
+/// Startsprache für Ton bzw. Untertitel; `nil` steht für Englisch (bisheriges Verhalten).
+private struct LanguageChoices: View {
+    var title: String
+    var extra: (code: String, name: String)
+    @Binding var selection: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.s(14)) {
+            Text(title)
+                .font(.system(size: Theme.s(30), weight: .bold))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.s(230)), spacing: Theme.s(16))], alignment: .leading, spacing: Theme.s(16)) {
+                ForEach(PlaybackLanguage.choices + [extra], id: \.code) { choice in
+                    let current = selection ?? PlaybackLanguage.defaultCode
+                    Button {
+                        selection = choice.code == PlaybackLanguage.defaultCode ? nil : choice.code
+                    } label: {
+                        Text(choice.name).lineLimit(1)
+                    }
+                    .buttonStyle(PillButtonStyle(selected: current == choice.code))
+                }
+            }
+        }
+        .tvFocusSection()
     }
 }
 

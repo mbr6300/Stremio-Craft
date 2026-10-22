@@ -99,6 +99,8 @@ struct SyncSnapshot: Codable, Equatable {
     var realDebridToken: String?
     /// Mit dem Konto verbundene Geräte (fehlt in Ständen vor dieser Funktion).
     var devices: [SyncDevice]?
+    /// Regeln für die Stream-Vorauswahl (fehlt in älteren Ständen).
+    var streamPreferences: StreamPreferences?
 
     /// Nur die geteilten Inhalte – ohne Geräteliste, die das AppModel nicht betrifft.
     var sharedData: SyncSnapshot {
@@ -160,6 +162,7 @@ enum SyncMerge {
         result.catalogs = value(base.catalogs, local.catalogs, remote.catalogs, preferRemote: joining)
         result.country = value(base.country, local.country, remote.country, preferRemote: joining)
         result.torrentio = value(base.torrentio, local.torrentio, remote.torrentio, preferRemote: joining)
+        result.streamPreferences = value(base.streamPreferences, local.streamPreferences, remote.streamPreferences, preferRemote: joining)
         result.realDebridToken = value(base.realDebridToken, local.realDebridToken, remote.realDebridToken, preferRemote: joining && remote.realDebridToken != nil)
         result.devices = keyed(base.devices ?? [], local.devices ?? [], remote.devices ?? [], id: \.id) { mine, theirs in
             mine.lastSeen >= theirs.lastSeen ? mine : theirs

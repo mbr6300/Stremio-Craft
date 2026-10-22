@@ -6,7 +6,15 @@ import UIKit
 struct PlaybackView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    var request: PlaybackRequest
+    /// Laufende Wiedergabe; wechselt bei „Nächste Folge“ im integrierten Player.
+    @State private var current: PlaybackRequest
+    /// Bereitgelegte nächste Folge (Stream schon freigeschaltet).
+    @State private var upNext: (request: PlaybackRequest, url: URL)?
+    @State private var preparingNext = false
+
+    init(request: PlaybackRequest) {
+        _current = State(initialValue: request)
+    }
 
     @State private var streams: [StreamCandidate] = []
     @State private var status = "Streams werden gesucht…"
@@ -29,11 +37,27 @@ struct PlaybackView: View {
                     playerURL = nil
                     // Nach dem Schauen zur Detailseite statt zurück in die Streamliste
                     // (der Navigationsstapel reagiert darauf, siehe `NavigationTab`).
-                    model.finishedPlayback = request.media
+                    model.finishedPlayback = current.media
                 }
             )) {
                 if let playerURL {
-                    KSPlayerScreen(url: playerURL, title: playerTitle, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
+                    // Fortschritt an die Folge binden, zu der der Player gehört – beim Wechsel zur
+                    // nächsten Folge meldet der alte Player seine letzte Position noch nach.
+                    let playing = current
+                    KSPlayerScreen(
+                        url: playerURL,
+                        title: playerTitle,
+                        resume: current.resumeSeconds,
+                        audioLanguage: model.playbackLanguages.audio,
+                        subtitleLanguage: model.playbackLanguages.subtitle,
+                        nextLabel: upNext.map { next in
+                            [next.request.episodeLabel, next.request.episodeTitle].compactMap { $0 }.joined(separator: " · ")
+                        },
+                        onNext: playNext
+                    ) { position, duration in
+                        saveProgress(playing, position: position, duration: duration)
+                    }
+                    .id(playerURL)
                 }
             }
         #else
@@ -44,10 +68,10 @@ struct PlaybackView: View {
     private func content(showsPlayer: Bool) -> some View {
         Group {
             if showsPlayer, let playerURL {
-                PlayerScreen(url: playerURL, resume: request.resumeSeconds, onProgress: saveBuiltInProgress)
+                PlayerScreen(url: playerURL, resume: current.resumeSeconds, onProgress: saveBuiltInProgress)
             } else {
                 ZStack {
-                    BackdropLayer(url: request.media.backdropURL)
+                    BackdropLayer(url: current.media.backdropURL)
                     streamList
                 }
             }
@@ -65,11 +89,11 @@ struct PlaybackView: View {
     private var streamList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.s(18)) {
-                Text(request.media.title)
+                Text(current.media.title)
                     .font(.system(size: Theme.s(56), weight: .heavy))
                     .lineLimit(1)
-                if let label = request.episodeLabel {
-                    Text("\(label)  ·  \(request.episodeTitle ?? "")")
+                if let label = current.episodeLabel {
+                    Text("\(label)  ·  \(current.episodeTitle ?? "")")
                         .font(.system(size: Theme.s(26), weight: .semibold))
                         .foregroundStyle(Theme.accent)
                 }
@@ -155,21 +179,24 @@ struct PlaybackView: View {
         do {
             let imdb = try await TMDBClient.imdbId(
                 apiKey: model.tmdbAPIKey,
-                tmdbId: request.media.tmdbId,
-                mediaType: request.media.normalizedType
+                tmdbId: current.media.tmdbId,
+                mediaType: current.media.normalizedType
             )
             guard let imdb, imdb.hasPrefix("tt") else {
                 status = "Keine IMDb-ID bei TMDB. Torrentio kann diesen Titel nicht auflösen."
                 return
             }
-            let found = try await TorrentioClient.streams(
+            let raw = try await TorrentioClient.streams(
                 options: model.torrentio,
                 token: token,
                 imdbId: imdb,
-                mediaType: request.media.normalizedType,
-                season: request.season,
-                episode: request.episode
+                mediaType: current.media.normalizedType,
+                season: current.season,
+                episode: current.episode
             )
+            // Nach den eigenen Regeln ordnen (Einstellungen → Stream-Auswahl) und bei Serien die
+            // zuletzt gewählte Gruppe/Auflösung bevorzugen.
+            let found = StreamPicker.sort(raw, preferences: model.streamPreferences, memory: model.streamMemory(for: current.media))
             streams = found
             guard !found.isEmpty else {
                 status = "Keine Streams gefunden."
@@ -180,7 +207,7 @@ struct PlaybackView: View {
             if token == nil {
                 banner = "Kein Real-Debrid-Token hinterlegt – bitte in den Einstellungen eintragen."
             }
-            guard request.autoStart, token != nil else { return }
+            guard current.autoStart, token != nil else { return }
             // Nur automatisch starten, wenn der Stream sofort verfügbar ist. Ohne RD-Markierung
             // (Info-Hash-Modus) den besten nehmen.
             let anyMarked = found.contains { $0.directURL != nil }
@@ -215,6 +242,7 @@ struct PlaybackView: View {
                 url = try await RealDebridClient.resolve(token: token, infoHash: hash, fileIndex: stream.fileIndex)
             }
             lastResolved = (stream, url)
+            model.rememberStream(stream, for: current.media)
             hand(url, stream: stream, to: choice)
         } catch {
             banner = error.localizedDescription
@@ -233,11 +261,11 @@ struct PlaybackView: View {
     }
 
     private func openInfuse(_ url: URL, stream: StreamCandidate) {
-        guard let infuse = Self.infuseURL(stream: url, filename: infuseFileName(stream, url: url), position: request.resumeSeconds) else {
+        guard let infuse = Self.infuseURL(stream: url, filename: infuseFileName(stream, url: url), position: current.resumeSeconds) else {
             banner = "Infuse-Adresse konnte nicht gebaut werden."
             return
         }
-        model.beginInfuseSession(request)
+        model.beginInfuseSession(current)
         openExternal(infuse, app: "Infuse", missingHint: "Ist Infuse (ab Version 8.4.7) installiert?")
     }
 
@@ -245,8 +273,8 @@ struct PlaybackView: View {
     /// auf dem Mac wird die Stream-Adresse direkt an VLC übergeben.
     /// VLC kann weder an einer Position starten noch die Position zurückmelden.
     private func openVLC(_ url: URL) {
-        if request.resumeSeconds >= 15 {
-            banner = "VLC startet von vorne – zum Fortsetzen bei \(WatchProgress.clock(request.resumeSeconds)) vorspulen."
+        if current.resumeSeconds >= 15 {
+            banner = "VLC startet von vorne – zum Fortsetzen bei \(WatchProgress.clock(current.resumeSeconds)) vorspulen."
         }
         #if targetEnvironment(macCatalyst)
         status = "Übergabe an VLC…"
@@ -285,30 +313,96 @@ struct PlaybackView: View {
 
     /// Sofort in „Weiterschauen“ aufnehmen; Infuse meldet die echte Position beim Schliessen.
     private func recordHandoff() {
-        guard model.progress(for: request.media) == nil else { return }
+        guard model.progress(for: current.media) == nil else { return }
         model.saveProgress(
-            media: request.media,
-            position: max(request.resumeSeconds, 15),
-            duration: request.durationHint,
-            season: request.season,
-            episode: request.episode,
-            episodeTitle: request.episodeTitle
+            media: current.media,
+            position: max(current.resumeSeconds, 15),
+            duration: current.durationHint,
+            season: current.season,
+            episode: current.episode,
+            episodeTitle: current.episodeTitle
         )
     }
 
     private func saveBuiltInProgress(position: Double, duration: Double) {
+        saveProgress(current, position: position, duration: duration)
+    }
+
+    private func saveProgress(_ playing: PlaybackRequest, position: Double, duration: Double) {
         model.saveProgress(
-            media: request.media,
+            media: playing.media,
             position: position,
             duration: duration,
-            season: request.season,
-            episode: request.episode,
-            episodeTitle: request.episodeTitle
+            season: playing.season,
+            episode: playing.episode,
+            episodeTitle: playing.episodeTitle
         )
+        // Gegen Ende einer Folge die nächste bereitlegen, damit sie nahtlos anschliesst.
+        if playing == current, playing.season != nil, upNext == nil, !preparingNext, duration > 60, duration - position <= 150 {
+            preparingNext = true
+            Task { await prepareNext(after: playing) }
+        }
+    }
+
+    // MARK: - Nächste Folge
+
+    /// Sucht die nächste ausgestrahlte Folge, wählt ihren Stream nach den Regeln und schaltet ihn frei.
+    private func prepareNext(after playing: PlaybackRequest) async {
+        guard let season = playing.season, let episode = playing.episode, model.hasTMDBKey,
+              let token = KeychainStore.loadToken() else { return }
+        let key = model.tmdbAPIKey
+        let media = playing.media
+        var next: EpisodeInfo?
+        for number in [season, season + 1] {
+            guard let episodes = try? await TMDBClient.fetchEpisodes(apiKey: key, tmdbId: media.tmdbId, season: number) else { break }
+            if let found = episodes.first(where: { number > season || $0.episodeNumber > episode }) {
+                next = found.isAired ? found : nil
+                break
+            }
+        }
+        guard let next,
+              let imdb = try? await TMDBClient.imdbId(apiKey: key, tmdbId: media.tmdbId, mediaType: "tv"),
+              let found = try? await TorrentioClient.streams(
+                  options: model.torrentio, token: token, imdbId: imdb, mediaType: "tv",
+                  season: next.seasonNumber, episode: next.episodeNumber
+              ) else { return }
+        let sorted = StreamPicker.sort(found, preferences: model.streamPreferences, memory: model.streamMemory(for: media))
+        let anyMarked = sorted.contains { $0.directURL != nil }
+        guard let best = anyMarked ? sorted.first(where: \.isCached) : sorted.first else { return }
+        let url: URL
+        if let direct = best.directURL {
+            url = direct
+        } else if let hash = best.infoHash,
+                  let resolved = try? await RealDebridClient.resolve(token: token, infoHash: hash, fileIndex: best.fileIndex) {
+            url = resolved
+        } else {
+            return
+        }
+        guard current == playing else { return }
+        let request = PlaybackRequest(
+            media: media,
+            season: next.seasonNumber,
+            episode: next.episodeNumber,
+            episodeTitle: next.name,
+            resumeSeconds: 0,
+            autoStart: true,
+            durationHint: next.runtime.map { Double($0 * 60) }
+        )
+        upNext = (request, url)
+    }
+
+    /// Wechselt im offenen Player zur bereitgelegten Folge.
+    private func playNext() {
+        guard let next = upNext, playerURL != nil else { return }
+        upNext = nil
+        preparingNext = false
+        current = next.request
+        lastResolved = nil
+        playerURL = next.url
     }
 
     private var playerTitle: String {
-        [request.media.title, request.episodeLabel, request.episodeTitle].compactMap { $0 }.joined(separator: " · ")
+        [current.media.title, current.episodeLabel, current.episodeTitle].compactMap { $0 }.joined(separator: " · ")
     }
 
     private func startBuiltIn(_ url: URL) {
@@ -325,10 +419,10 @@ struct PlaybackView: View {
     private func infuseFileName(_ stream: StreamCandidate, url: URL) -> String {
         let source = stream.fileName ?? url.lastPathComponent
         let ext = (source as NSString).pathExtension.lowercased()
-        var base = request.media.title
-        if let label = request.episodeLabel {
+        var base = current.media.title
+        if let label = current.episodeLabel {
             base += " \(label)"
-        } else if let year = request.media.year {
+        } else if let year = current.media.year {
             base += " (\(year))"
         }
         base = base.components(separatedBy: CharacterSet(charactersIn: "/:\\?%*|\"<>")).joined()
