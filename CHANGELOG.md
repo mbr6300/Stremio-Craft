@@ -6,14 +6,16 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
-- Empfehlungen: „Empfohlen für dich“ kommt aus einer eigenen Datenbank mit rund 30'000 Filmen und Serien (IMDb ab 6.0) und berücksichtigt ♥, Meine Liste, Gesehenes und die Vorlieben des Profils.
-- Profile: Vorlieben einstellbar – Genres, Jahrzehnte, Sprachen, Länge, Mindestbewertung, Altersfreigabe, Lieblingsschauspieler und -regie.
-- „Kein Interesse“ (👎) in der Detailansicht und im Kontextmenü: Der Titel und Ähnliches verschwinden aus den Empfehlungen.
-- Detailansicht: Die Beschreibung wird ganz angezeigt.
-- Profile: Ton- und Untertitelsprache für den integrierten Player wählbar (auch „Original“ bzw. Untertitel aus).
-- Integrierter Player: Am Ende einer Folge erscheint „Nächste Folge in 10 s“ – startet die nächste Folge automatisch, abbrechbar.
-- Einstellungen → Stream-Auswahl: höchste Auflösung, HDR, grösste Datei und Sprache bestimmen, welcher Stream vorne steht und automatisch startet; bei Serien wird die zuletzt gewählte Gruppe bevorzugt.
-- Serien: Staffeln zeigen den Fortschritt („Staffel 2 · 4/10“, „Staffel 1 ✓“), lassen sich ganz als gesehen markieren, und die Detailseite beginnt bei der ersten nicht fertigen Staffel.
+## 1.0.3 – 2026-10-22
+
+- Bessere Empfehlungen: „Empfohlen für dich“ wählt jetzt aus rund 30'000 gut bewerteten Filmen und Serien und richtet sich nach dem, was du magst, gemerkt oder schon geschaut hast.
+- Deine Vorlieben im Profil: Lieblingsgenres, Jahrzehnte, Sprachen, Länge, Mindestbewertung, Altersgrenze (gut für Kinderprofile) und Lieblingsschauspieler.
+- Neuer Daumen nach unten 👎: Titel, die dich nicht interessieren, und Ähnliches tauchen in den Empfehlungen nicht mehr auf.
+- Nächste Folge: Am Ende einer Folge läuft nach 10 Sekunden automatisch die nächste – mit „Abbrechen“ lässt sich das stoppen.
+- Sprache pro Profil: Jedes Profil wählt selbst, mit welchem Ton und welchen Untertiteln der Player startet (Untertitel auch ganz aus).
+- Passender Stream: In den Einstellungen unter „Stream-Auswahl“ legst du fest, was dir wichtig ist (z. B. höchstens 1080p oder lieber deutscher Ton). Bei Serien nimmt die App wieder einen ähnlichen Stream wie bei der letzten Folge.
+- Serien-Fortschritt: Die Staffeln zeigen, wie viel du gesehen hast („Staffel 1 ✓“, „Staffel 2 · 4/10“). Eine ganze Staffel lässt sich auf einmal als gesehen markieren, und die Seite öffnet direkt bei der Staffel, mit der du weitermachst.
+- Die Beschreibung eines Films oder einer Serie wird jetzt ganz angezeigt.
 
 ## 1.0.2 – 2026-10-21
 
