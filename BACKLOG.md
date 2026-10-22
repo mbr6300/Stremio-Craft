@@ -27,7 +27,32 @@ greift darauf zurück, nicht nur auf das, was Streaming-Anbieter gerade im Angeb
   - Nur Filme: Laufzeit, Regie, Sammlung/Reihe.
   - Nur Serien: Status (laufend/beendet), Anzahl Staffeln und Folgen, Sender, erste und letzte
     Ausstrahlung, Folgenlänge, Schöpfer.
-- Offen zu klären: Auswahlkriterium für „die bekanntesten“ und Empfehlungslogik mit Profilvorlieben.
+- Auswahl der 30'000 Titel:
+  - Bekanntheit nach Stimmenzahl, ergänzt durch die frei verfügbaren IMDb-Daten (`title.ratings`,
+    Stimmen pro Titel).
+  - Getrennte Anteile, damit Serien nicht von Filmen verdrängt werden: etwa 20'000 Filme und 10'000 Serien.
+  - Neuere Titel nach Stimmen pro Jahr seit Erscheinen werten, sonst fehlen die letzten zwei Jahre.
+  - Eigenes Kontingent für deutschsprachige Produktionen (DE/CH/AT), die international weniger Stimmen haben.
+  - Ausschliessen: Titel ohne Poster oder Beschreibung, Erwachseneninhalte, bei Serien Talkshows,
+    Nachrichten und Reality-Formate (sofern nicht sehr bekannt).
+- Vorlieben im Profil (alle optional):
+  - Lieblings- und unerwünschte Genres.
+  - Bevorzugte Jahrzehnte.
+  - Sprache: Originalsprachen, die ohne Untertitel gehen.
+  - Maximale Laufzeit bzw. Folgenlänge.
+  - Mindestbewertung.
+  - Höchste Altersfreigabe (z. B. für ein Kinderprofil, als harter Filter).
+  - Lieblingsschauspieler und -regie.
+- Empfehlungslogik:
+  - Harte Filter: Altersfreigabe, unerwünschte Genres, bereits Gesehenes.
+  - Grundwert: Qualität als gewichtete Bewertung, damit Titel mit wenigen Stimmen nicht zu hoch landen.
+  - Passung zu den Profilvorlieben.
+  - Ähnlichkeit zu Titeln aus „Meine Liste“, „Weiterschauen“ und Gesehenem über Genres, Stichworte,
+    Darsteller und Regie.
+  - Bonus, wenn der Titel bei den eigenen Streaming-Anbietern der Region verfügbar ist.
+  - Daumen hoch/runter auf Titeln als zusätzliches Signal.
+  - Vielfalt: nicht mehrere Teile derselben Reihe oder lauter Titel eines Genres nacheinander.
+  - Die Berechnung läuft im Worker, die App erhält nur die fertige Liste pro Profil.
 
 ### Ton- und Untertitelsprache einstellbar
 Heute startet der integrierte Player fest mit Englisch (`KSPlayerScreen.swift`). In den Einstellungen
