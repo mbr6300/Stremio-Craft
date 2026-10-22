@@ -21,6 +21,8 @@ struct Profile: Codable, Identifiable, Hashable {
     var id = UUID().uuidString
     var name: String
     var avatar: Avatar
+    /// Vorlieben für die Empfehlungen; fehlt bei älteren Profilen.
+    var preferences: TastePreferences?
 
     static let maxCount = 6
 }
@@ -248,6 +250,10 @@ struct ProfileEditView: View {
                     }
                 }
                 .tvFocusSection()
+                TastePreferencesEditor(preferences: Binding(
+                    get: { profile.preferences ?? TastePreferences() },
+                    set: { profile.preferences = $0 }
+                ))
                 HStack(spacing: Theme.s(24)) {
                     Button(isNew ? "Profil anlegen" : "Sichern") {
                         let saved = model.saveProfile(profile)
@@ -285,6 +291,131 @@ struct ProfileEditView: View {
                 .scaleEffect(isFocused ? 1.12 : 1)
                 .animation(.easeOut(duration: 0.15), value: isFocused)
         }
+    }
+}
+
+/// Vorlieben für „Empfohlen für dich“. Genres: einmal wählen = mag ich, nochmals = mag ich nicht.
+struct TastePreferencesEditor: View {
+    @Binding var preferences: TastePreferences
+    @State private var peopleText = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.s(30)) {
+            Text("Vorlieben für Empfehlungen")
+                .font(.system(size: Theme.s(30), weight: .bold))
+            Text("Alles freiwillig. Genres: einmal wählen = mag ich, nochmals = lieber nicht.")
+                .font(.system(size: Theme.s(20)))
+                .foregroundStyle(.white.opacity(0.55))
+
+            section("Genres") {
+                ForEach(TastePreferences.genres, id: \.id) { genre in
+                    let liked = preferences.likedGenres.contains(genre.id)
+                    let disliked = preferences.dislikedGenres.contains(genre.id)
+                    Button { cycle(genre.id) } label: {
+                        Label(genre.name, systemImage: liked ? "hand.thumbsup.fill" : (disliked ? "hand.thumbsdown.fill" : "circle"))
+                            .opacity(disliked ? 0.6 : 1)
+                    }
+                    .buttonStyle(PillButtonStyle(selected: liked))
+                }
+            }
+            section("Jahrzehnte") {
+                ForEach(TastePreferences.decadeChoices, id: \.self) { decade in
+                    let label = decade == 1960 ? "60er und älter" : (decade < 2000 ? "\(decade % 100)er" : "\(decade)er")
+                    toggle(label, isOn: preferences.decades.contains(decade)) {
+                        preferences.decades.toggle(decade)
+                        // „und älter“: frühere Jahrzehnte mitnehmen.
+                        if decade == 1960 {
+                            for older in [1920, 1930, 1940, 1950] { preferences.decades.set(older, on: preferences.decades.contains(1960)) }
+                        }
+                    }
+                }
+            }
+            section("Sprachen ohne Untertitel") {
+                ForEach(TastePreferences.languageChoices, id: \.code) { language in
+                    toggle(language.name, isOn: preferences.languages.contains(language.code)) {
+                        preferences.languages.toggle(language.code)
+                    }
+                }
+            }
+            section("Höchstens so lang") {
+                ForEach(TastePreferences.runtimeChoices, id: \.self) { minutes in
+                    toggle(minutes.map { "\($0) Min." } ?? "Egal", isOn: preferences.maxRuntime == minutes) {
+                        preferences.maxRuntime = minutes
+                    }
+                }
+            }
+            section("IMDb-Bewertung mindestens") {
+                ForEach(TastePreferences.ratingChoices, id: \.self) { rating in
+                    toggle(rating.map { String(format: "%.1f", $0) } ?? "Egal", isOn: preferences.minRating == rating) {
+                        preferences.minRating = rating
+                    }
+                }
+            }
+            section("Altersfreigabe höchstens") {
+                ForEach(TastePreferences.ageChoices, id: \.self) { age in
+                    toggle(age.map { "FSK \($0)" } ?? "Alle", isOn: preferences.maxAge == age) {
+                        preferences.maxAge = age
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: Theme.s(14)) {
+                Text("Lieblingsschauspieler und -regie")
+                    .font(.system(size: Theme.s(24), weight: .semibold))
+                TextField("z. B. Tom Hanks, Christopher Nolan", text: $peopleText)
+                    .frame(maxWidth: Theme.s(900))
+                    .onSubmit(applyPeople)
+                    .onChange(of: peopleText) { applyPeople() }
+            }
+            .tvFocusSection()
+        }
+        .onAppear { peopleText = preferences.people.joined(separator: ", ") }
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: Theme.s(14)) {
+            Text(title)
+                .font(.system(size: Theme.s(24), weight: .semibold))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.s(230)), spacing: Theme.s(16))], alignment: .leading, spacing: Theme.s(16)) {
+                content()
+            }
+        }
+        .tvFocusSection()
+    }
+
+    private func toggle(_ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).lineLimit(1)
+        }
+        .buttonStyle(PillButtonStyle(selected: isOn))
+    }
+
+    /// Neutral → mag ich → mag ich nicht → neutral.
+    private func cycle(_ genre: Int) {
+        if preferences.likedGenres.contains(genre) {
+            preferences.likedGenres.removeAll { $0 == genre }
+            preferences.dislikedGenres.append(genre)
+        } else if preferences.dislikedGenres.contains(genre) {
+            preferences.dislikedGenres.removeAll { $0 == genre }
+        } else {
+            preferences.likedGenres.append(genre)
+        }
+    }
+
+    private func applyPeople() {
+        preferences.people = peopleText.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+}
+
+private extension Array where Element: Equatable {
+    mutating func toggle(_ value: Element) {
+        set(value, on: !contains(value))
+    }
+
+    mutating func set(_ value: Element, on: Bool) {
+        removeAll { $0 == value }
+        if on { append(value) }
     }
 }
 

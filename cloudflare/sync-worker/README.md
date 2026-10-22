@@ -35,6 +35,29 @@ sh test.sh
 Simulatoren erreichen den lokalen Worker unter `http://127.0.0.1:8787`
 (in der App als Sync-Server eintragen oder per Startargument `-syncServerURL http://127.0.0.1:8787`).
 
+## Titeldatenbank für Empfehlungen
+
+Eigene D1-Datenbank `stremio-craft-catalog` (Binding `CATALOG`, Schema `catalog-schema.sql`) mit den
+bekanntesten rund 30'000 Filmen und Serien (IMDb ab 6.0). Der Cron-Trigger füllt sie Schritt für
+Schritt (`src/catalog.js`) und beginnt alle 3 Monate von vorn; `POST /v1/recommend` berechnet daraus
+die Empfehlungen (`src/recommend.js`). Braucht **Workers Paid** (Einlesen der IMDb-Datendateien).
+
+Einmalig einrichten:
+
+```sh
+npx wrangler d1 create stremio-craft-catalog      # database_id in wrangler.toml eintragen
+npx wrangler d1 execute stremio-craft-catalog --remote --file catalog-schema.sql
+plutil -extract TMDB_API_KEY raw ../../StremioCraft/LocalSecrets.plist | npx wrangler secret put TMDB_API_KEY
+npx wrangler deploy
+```
+
+Stand des Imports: `curl https://stremio-craft-sync.<subdomain>.workers.dev/v1/catalog/status`.
+Lokal: TMDB-Schlüssel in `.dev.vars` (`TMDB_API_KEY=…`), dann `npx wrangler dev --test-scheduled`
+und Schritte mit `curl "http://127.0.0.1:8787/__scheduled?cron=*+*+*+*+*"` auslösen.
+
+IMDb sperrt Anfragen aus dem Cloudflare-Netz an seine Schnittstelle (429); darum stammen Bewertungen,
+Art und Jahr aus den offiziellen Datendateien (datasets.imdbws.com), alles Weitere von TMDB.
+
 ## Ratenbegrenzung
 
 Eingebaut über die Workers-Rate-Limit-Bindings in `wrangler.toml` (auch unter `workers.dev` wirksam,

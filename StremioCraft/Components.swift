@@ -312,6 +312,12 @@ struct MediaLink: View {
                 Label(model.isLoved(item) ? "Nicht mehr lieben" : "Lieben ♥",
                       systemImage: model.isLoved(item) ? "heart.slash" : "heart")
             }
+            Button {
+                model.toggleDisliked(item)
+            } label: {
+                Label(model.isDisliked(item) ? "Doch interessant" : "Kein Interesse",
+                      systemImage: model.isDisliked(item) ? "hand.thumbsup" : "hand.thumbsdown")
+            }
             if item.normalizedType == "movie" {
                 let watched = model.isWatched(item)
                 Button {

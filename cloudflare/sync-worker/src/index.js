@@ -12,8 +12,14 @@
 //   GET    /v1/pair/:pin          → { publicKey, payload|null } | 404
 //   PUT    /v1/pair/:pin          { payload } → 204 | 409 (schon beantwortet)
 //   DELETE /v1/pair/:pin          → 204
+//   POST   /v1/recommend          Empfehlungen aus der Titeldatenbank (siehe recommend.js)
+//   GET    /v1/catalog/status     Stand der Titeldatenbank und des Imports
 //
-// Zu viele Anfragen einer IP → 429 (Kopplung 60/min, Sync 120/min).
+// Zu viele Anfragen einer IP → 429 (Kopplung 60/min, Sync und Empfehlungen 120/min).
+// Der Cron-Trigger (jede Minute) füllt und erneuert die Titeldatenbank (siehe catalog.js).
+
+import { catalogStatus, runImportStep } from "./catalog.js";
+import { recommend } from "./recommend.js";
 
 const SPACE_ID = /^[0-9a-f]{64}$/;
 const PIN = /^[0-9]{6}$/;
@@ -23,16 +29,20 @@ const MAX_KEY = 100;
 const PAIR_TTL_MS = 10 * 60 * 1000;
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
-      return await route(request, env);
+      return await route(request, env, ctx);
     } catch (error) {
       return json({ error: "server", message: String(error?.message ?? error) }, 500);
     }
   },
+
+  async scheduled(event, env) {
+    await runImportStep(env);
+  },
 };
 
-async function route(request, env) {
+async function route(request, env, ctx) {
   const url = new URL(request.url);
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts[0] !== "v1") return json({ error: "not_found" }, 404);
@@ -55,6 +65,13 @@ async function route(request, env) {
         await env.DB.prepare("DELETE FROM spaces WHERE id = ?").bind(id).run();
         return new Response(null, { status: 204 });
     }
+  }
+
+  if (parts[1] === "recommend" && parts.length === 2 && request.method === "POST") {
+    return recommend(request, env, ctx, json);
+  }
+  if (parts[1] === "catalog" && parts[2] === "status" && request.method === "GET") {
+    return env.CATALOG ? json(await catalogStatus(env)) : json({ error: "no_catalog" }, 503);
   }
 
   if (parts[1] === "pair") {

@@ -9,6 +9,7 @@ final class AppModel {
     private let favoriteKey = "favorites"
     private let watchedKey = "watched"
     private let lovedKey = "loved"
+    private let dislikedKey = "disliked"
     private let pendingInfuseKey = "pendingInfuse"
     private let tmdbKey = "tmdbAPIKey"
     private let countryKey = "discoverCountry"
@@ -62,6 +63,9 @@ final class AppModel {
     @ObservationIgnored private var watchedBuckets: [String: Set<String>] = [:]
     /// Gesehene Filme ("movie-<id>") und Folgen ("tv-<id>-<staffel>-<folge>") des aktiven Profils.
     var watched: Set<String> = []
+    @ObservationIgnored private var dislikedBuckets: [String: Set<String>] = [:]
+    /// Mit „Kein Interesse“ markierte Titel ("movie-<id>", "tv-<id>") des aktiven Profils.
+    var disliked: Set<String> = []
     @ObservationIgnored private var progressBuckets: [String: [WatchProgress]] = [:]
     @ObservationIgnored private var loadedSignature = ""
     @ObservationIgnored private var loadGeneration = 0
@@ -163,8 +167,7 @@ final class AppModel {
         }
         let key = tmdbAPIKey
         let region = country
-        let favoriteItems = favorites.map(\.media)
-        let lovedItems = loved.map(\.media)
+        let taste = tasteInput
         let personal = Set(entries.filter(\.isPersonal).map(\.id))
         loadedSignature = catalogSignature
 
@@ -172,7 +175,7 @@ final class AppModel {
             for entry in entries {
                 group.addTask {
                     do {
-                        let items = try await Self.fetchItems(entry, apiKey: key, country: region, favorites: favoriteItems, loved: lovedItems)
+                        let items = try await Self.fetchItems(entry, apiKey: key, country: region, taste: taste)
                         return (entry.id, .success(items))
                     } catch {
                         return (entry.id, .failure(error))
@@ -204,8 +207,7 @@ final class AppModel {
         _ entry: CatalogEntry,
         apiKey: String,
         country: String,
-        favorites: [MediaItem],
-        loved: [MediaItem]
+        taste: TasteInput
     ) async throws -> [MediaItem] {
         switch entry.source {
         case .tmdbTrending:
@@ -213,13 +215,13 @@ final class AppModel {
         case .trending(let type):
             return try await TMDBClient.fetchTrending(apiKey: apiKey, country: country, type: type)
         case .favorites:
-            return favorites
+            return taste.favorites
         case .loved:
-            return loved
+            return taste.loved
         case .newOnProviders:
             return try await DiscoverCache.shared.firstPage(.newOnAllProviders, apiKey: apiKey, country: country)
         case .recommendations:
-            return await recommendations(loved: loved, favorites: favorites, apiKey: apiKey, country: country)
+            return await recommendations(taste, apiKey: apiKey, country: country)
         case .provider(let id):
             guard let provider = TMDBClient.providers.first(where: { $0.id == id }) else { return [] }
             return try await TMDBClient.fetchProviderRow(apiKey: apiKey, provider: provider, country: country)
@@ -228,10 +230,58 @@ final class AppModel {
         }
     }
 
-    /// Empfehlungen auf Basis der Lieblingstitel (♥, doppelt gewichtet) und von Meine Liste:
-    /// je Runde zwei Treffer pro Lieblingstitel, einer pro Merklisten-Titel; ohne Doppelte und
-    /// ohne Titel, die schon markiert sind.
-    private nonisolated static func recommendations(loved: [MediaItem], favorites: [MediaItem], apiKey: String, country: String) async -> [MediaItem] {
+    /// Was die Empfehlungen des aktiven Profils prägt (für Hintergrund-Tasks kopiert).
+    struct TasteInput: Sendable {
+        var loved: [MediaItem]
+        var favorites: [MediaItem]
+        /// Gesehene Filme und angefangene Serien ("movie-1", "tv-2").
+        var watched: [String]
+        var disliked: [String]
+        var preferences: TastePreferences
+    }
+
+    private var tasteInput: TasteInput {
+        let series = watched.compactMap { key -> String? in
+            guard key.hasPrefix("tv-") else { return nil }
+            return key.split(separator: "-").prefix(2).joined(separator: "-")
+        }
+        let movies = watched.filter { $0.hasPrefix("movie-") }
+        let started = continueWatching.map { "\($0.mediaType == "tv" ? "tv" : "movie")-\($0.tmdbId)" }
+        var seen = Set<String>()
+        return TasteInput(
+            loved: loved.map(\.media),
+            favorites: favorites.map(\.media),
+            watched: (started + movies + series).filter { seen.insert($0).inserted },
+            disliked: disliked.sorted(),
+            preferences: profiles.first { $0.id == activeProfileID }?.preferences ?? TastePreferences()
+        )
+    }
+
+    /// Empfehlungen aus der eigenen Titeldatenbank: ♥ prägt am stärksten, Meine Liste und Gesehenes
+    /// weniger, „Kein Interesse“ zieht ab; dazu die Vorlieben des Profils. Ohne Server oder solange
+    /// die Datenbank leer ist, die bisherigen TMDB-Empfehlungen.
+    private nonisolated static func recommendations(_ taste: TasteInput, apiKey: String, country: String) async -> [MediaItem] {
+        let seeds = taste.loved.map { RecommendationClient.Seed(id: $0.id, w: 3) }
+            + taste.favorites.map { RecommendationClient.Seed(id: $0.id, w: 1.5) }
+            + taste.watched.prefix(150).map { RecommendationClient.Seed(id: $0, w: 1) }
+            + taste.disliked.map { RecommendationClient.Seed(id: $0, w: -3) }
+        let exclude = Set(taste.loved.map(\.id) + taste.favorites.map(\.id) + taste.watched + taste.disliked)
+        let query = RecommendationClient.Query(
+            region: country,
+            seeds: Array(seeds.prefix(300)),
+            exclude: exclude.sorted(),
+            prefs: taste.preferences
+        )
+        if let items = await RecommendationClient.fetch(query), !items.isEmpty { return items }
+        let disliked = Set(taste.disliked)
+        return await tmdbRecommendations(loved: taste.loved, favorites: taste.favorites, apiKey: apiKey, country: country)
+            .filter { !disliked.contains($0.id) }
+    }
+
+    /// Ersatz ohne Titeldatenbank: TMDB-Empfehlungen zu den Lieblingstiteln (♥, doppelt gewichtet)
+    /// und zu Meine Liste – je Runde zwei Treffer pro Lieblingstitel, einer pro Merklisten-Titel;
+    /// ohne Doppelte und ohne Titel, die schon markiert sind.
+    private nonisolated static func tmdbRecommendations(loved: [MediaItem], favorites: [MediaItem], apiKey: String, country: String) async -> [MediaItem] {
         let lovedSeeds = Array(loved.prefix(6))
         let lovedIDs = Set(lovedSeeds.map(\.id))
         let seeds: [(item: MediaItem, weight: Int)] = lovedSeeds.map { ($0, 2) }
@@ -283,12 +333,11 @@ final class AppModel {
         guard let entry = catalogs.first(where: { $0.enabled && $0.source == .recommendations }), hasTMDBKey else { return }
         let key = tmdbAPIKey
         let region = country
-        let lovedSeeds = loved.map(\.media)
-        let favoriteSeeds = favorites.map(\.media)
+        let taste = tasteInput
         recommendationTask = Task {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             guard !Task.isCancelled else { return }
-            let items = await Self.recommendations(loved: lovedSeeds, favorites: favoriteSeeds, apiKey: key, country: region)
+            let items = await Self.recommendations(taste, apiKey: key, country: region)
             guard !Task.isCancelled, let index = rows.firstIndex(where: { $0.id == entry.id }) else { return }
             rows[index].items = items
             rows[index].isLoading = false
@@ -411,17 +460,19 @@ final class AppModel {
             profiles.append(stored)
         }
         save(profiles, key: profilesKey)
+        if stored.id == activeProfileID { refreshPersonalRows() } // Vorlieben prägen die Empfehlungen
         return stored
     }
 
     func deleteProfile(_ profile: Profile) {
         profiles.removeAll { $0.id == profile.id }
         save(profiles, key: profilesKey)
-        for base in [favoriteKey, lovedKey, continueKey, recentSearchesKey, watchedKey] {
+        for base in [favoriteKey, lovedKey, continueKey, recentSearchesKey, watchedKey, dislikedKey] {
             defaults.removeObject(forKey: bucketKey(base, profile.id))
         }
         favoriteBuckets[profile.id] = nil
         lovedBuckets[profile.id] = nil
+        dislikedBuckets[profile.id] = nil
         progressBuckets[profile.id] = nil
         watchedBuckets[profile.id] = nil
         if activeProfileID == profile.id {
@@ -448,6 +499,7 @@ final class AppModel {
             lovedBuckets[bucketName(id)] = decodeList(FavoriteItem.self, key: bucketKey(lovedKey, id))
             progressBuckets[bucketName(id)] = decodeList(WatchProgress.self, key: bucketKey(continueKey, id))
             watchedBuckets[bucketName(id)] = Set(defaults.stringArray(forKey: bucketKey(watchedKey, id)) ?? [])
+            dislikedBuckets[bucketName(id)] = Set(defaults.stringArray(forKey: bucketKey(dislikedKey, id)) ?? [])
         }
         refreshFavorites()
         refreshContinueWatching()
@@ -521,6 +573,31 @@ final class AppModel {
         let next = activeProfileID.map { watchedBuckets[$0] ?? [] }
             ?? bucketIDs.reduce(into: Set<String>()) { $0.formUnion(watchedBuckets[bucketName($1)] ?? []) }
         if next != watched { watched = next }
+        let dislikedNext = activeProfileID.map { dislikedBuckets[$0] ?? [] }
+            ?? bucketIDs.reduce(into: Set<String>()) { $0.formUnion(dislikedBuckets[bucketName($1)] ?? []) }
+        if dislikedNext != disliked { disliked = dislikedNext }
+    }
+
+    // MARK: - Kein Interesse (👎)
+
+    func isDisliked(_ item: MediaItem) -> Bool {
+        disliked.contains(item.id)
+    }
+
+    /// Abgelehnte Titel erscheinen nicht mehr in den Empfehlungen und ziehen Ähnliches nach unten.
+    /// Wie bei „Gesehen“: Markieren im aktiven Profil, Entfernen bei „Alle“ aus allen Profilen.
+    func toggleDisliked(_ item: MediaItem) {
+        let value = !isDisliked(item)
+        if value && isLoved(item) { toggleLoved(item) }
+        let targets: [String?] = value ? [activeProfileID] : (activeProfileID.map { [$0] } ?? bucketIDs)
+        for id in targets {
+            var set = dislikedBuckets[bucketName(id)] ?? []
+            if value { set.insert(item.id) } else { set.remove(item.id) }
+            dislikedBuckets[bucketName(id)] = set
+            defaults.set(Array(set), forKey: bucketKey(dislikedKey, id))
+        }
+        refreshWatched()
+        refreshPersonalRows()
     }
 
     // MARK: - Suchverlauf
@@ -879,7 +956,8 @@ extension AppModel {
                 loved: lovedBuckets[name] ?? [],
                 progress: progressBuckets[name] ?? [],
                 watched: (watchedBuckets[name] ?? []).sorted(),
-                searches: defaults.stringArray(forKey: bucketKey(recentSearchesKey, id)) ?? []
+                searches: defaults.stringArray(forKey: bucketKey(recentSearchesKey, id)) ?? [],
+                disliked: (dislikedBuckets[name] ?? []).sorted()
             )
         }
         return SyncSnapshot(
@@ -896,11 +974,12 @@ extension AppModel {
     func applySyncSnapshot(_ snapshot: SyncSnapshot) {
         let removedProfiles = Set(profiles.map(\.id)).subtracting(snapshot.profiles.map(\.id))
         for id in removedProfiles {
-            for base in [favoriteKey, lovedKey, continueKey, recentSearchesKey, watchedKey] {
+            for base in [favoriteKey, lovedKey, continueKey, recentSearchesKey, watchedKey, dislikedKey] {
                 defaults.removeObject(forKey: bucketKey(base, id))
             }
             favoriteBuckets[id] = nil
             lovedBuckets[id] = nil
+            dislikedBuckets[id] = nil
             progressBuckets[id] = nil
             watchedBuckets[id] = nil
         }
@@ -920,6 +999,8 @@ extension AppModel {
             lovedBuckets[name] = bucket.loved
             progressBuckets[name] = bucket.progress
             watchedBuckets[name] = Set(bucket.watched)
+            dislikedBuckets[name] = Set(bucket.disliked ?? [])
+            defaults.set(bucket.disliked ?? [], forKey: bucketKey(dislikedKey, id))
             save(bucket.favorites, key: bucketKey(favoriteKey, id))
             save(bucket.loved, key: bucketKey(lovedKey, id))
             save(bucket.progress, key: bucketKey(continueKey, id))

@@ -141,6 +141,14 @@ struct DetailView: View {
                     .frame(height: Theme.s(30))
             }
             .buttonStyle(PillButtonStyle())
+            Button {
+                model.toggleDisliked(shown)
+            } label: {
+                Image(systemName: model.isDisliked(shown) ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                    .frame(height: Theme.s(30))
+            }
+            .buttonStyle(PillButtonStyle(selected: model.isDisliked(shown)))
+            .accessibilityLabel(model.isDisliked(shown) ? "Kein Interesse aufheben" : "Kein Interesse")
             if !isSeries {
                 let watched = model.isWatched(shown)
                 Button {

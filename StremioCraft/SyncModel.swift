@@ -134,6 +134,8 @@ struct SyncBucket: Codable, Equatable {
     var progress: [WatchProgress] = []
     var watched: [String] = []
     var searches: [String] = []
+    /// „Kein Interesse“ (fehlt in Ständen vor dieser Funktion).
+    var disliked: [String]?
 }
 
 // MARK: - Zusammenführen
@@ -195,7 +197,8 @@ enum SyncMerge {
                 mine.updatedAt >= theirs.updatedAt ? mine : theirs
             },
             watched: set(base.watched, local.watched, remote.watched),
-            searches: searches(base.searches, local.searches, remote.searches)
+            searches: searches(base.searches, local.searches, remote.searches),
+            disliked: set(base.disliked ?? [], local.disliked ?? [], remote.disliked ?? [])
         )
     }
 

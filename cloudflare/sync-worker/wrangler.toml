@@ -7,6 +7,29 @@ binding = "DB"
 database_name = "stremio-craft-sync"
 database_id = "7311ae8a-2c31-46d3-b1dd-e97646b5e35a"
 
+# Titeldatenbank für Empfehlungen (Schema: catalog-schema.sql). Getrennt vom Sync, der nur
+# verschlüsselte Blöcke enthält.
+[[d1_databases]]
+binding = "CATALOG"
+database_name = "stremio-craft-catalog"
+database_id = "45458a20-e814-407d-b166-6af40e69bb10"
+
+# Import der Titeldatenbank in kleinen Schritten; alle 3 Monate von vorn (siehe src/catalog.js).
+# Der TMDB-Schlüssel liegt als Secret im Worker: npx wrangler secret put TMDB_API_KEY
+[triggers]
+crons = ["* * * * *"]
+
+# Braucht Workers Paid: Das Einlesen der IMDb-Datendateien (Titel-Liste rund 200 MB) dauert
+# einige Sekunden Rechenzeit; der Gratis-Plan bricht nach Millisekunden ab.
+[limits]
+cpu_ms = 300000
+
+# Schrittgrössen pro Lauf (unter 1000 externen Anfragen).
+[vars]
+IMPORT_DACH_PAGES = "40"
+IMPORT_ENRICH_BATCH = "250"
+IMPORT_PROVIDER_PAGES = "400"
+
 # Ratenbegrenzung pro IP (eingebaut in Workers, funktioniert auch unter workers.dev).
 # Kopplungs-PINs knapp halten, damit niemand PINs durchprobieren kann.
 [[ratelimits]]

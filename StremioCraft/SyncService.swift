@@ -64,8 +64,15 @@ final class SyncService {
     }
 
     /// Adresse des Workers: Einstellung, sonst `SYNC_URL` aus LocalSecrets.plist.
-    var serverURL: URL? {
-        let text = serverOverride.isEmpty ? Self.bundledServer : serverOverride
+    var serverURL: URL? { Self.serverURL(override: serverOverride) }
+
+    /// Dieselbe Adresse ohne laufenden Sync – der Worker liefert auch die Empfehlungen.
+    nonisolated static var configuredServerURL: URL? {
+        serverURL(override: UserDefaults.standard.string(forKey: "syncServerURL") ?? "")
+    }
+
+    private nonisolated static func serverURL(override: String) -> URL? {
+        let text = override.isEmpty ? bundledServer : override
         guard !text.isEmpty, let url = URL(string: text), url.scheme?.hasPrefix("http") == true else { return nil }
         return url
     }
@@ -390,7 +397,7 @@ final class SyncService {
         }
     }
 
-    private static let bundledServer: String = {
+    private nonisolated static let bundledServer: String = {
         guard let url = Bundle.main.url(forResource: "LocalSecrets", withExtension: "plist"),
               let data = try? Data(contentsOf: url),
               let object = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
