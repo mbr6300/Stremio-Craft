@@ -103,10 +103,16 @@ for user in items(try await call("GET", "/v1/users?limit=200")) {
 //    nach ein paar Minuten in App Store Connect auf, darum bis zu 15 Minuten nachfragen.
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--notes"), arguments.count > index + 1 {
-    let notes = try String(contentsOfFile: arguments[index + 1], encoding: .utf8)
+    // TestFlight lehnt Emojis und Symbole (✓, 👎 …) ab: Pfeile, Dingbats und alles ausserhalb der
+    // Grundebene entfernen, doppelte Leerzeichen danach zusammenziehen.
+    let raw = try String(contentsOfFile: arguments[index + 1], encoding: .utf8)
+    let notes = String(String.UnicodeScalarView(raw.unicodeScalars.filter {
+        !(0x2190...0x2BFF).contains($0.value) && $0.value <= 0xFFFF && $0.value != 0xFE0F
+    })).replacingOccurrences(of: "  ", with: " ").replacingOccurrences(of: " )", with: ")")
     let locale = attr(app)["primaryLocale"] as? String ?? "de-DE"
     var pending = Set(arguments.dropFirst(index + 2))
     let deadline = Date().addingTimeInterval(15 * 60)
+    var lastError: String?
     while !pending.isEmpty, Date() < deadline {
         let versions = pending.sorted().joined(separator: ",")
         for build in items(try await call("GET", "/v1/builds?filter[app]=\(appID)&filter[version]=\(versions)")) {
@@ -129,12 +135,14 @@ if let index = arguments.firstIndex(of: "--notes"), arguments.count > index + 1 
                 print("✓ Neuerungen eingetragen: Build \(version)")
             } catch {
                 // Build noch in Verarbeitung – in der nächsten Runde erneut versuchen.
+                lastError = error.localizedDescription
             }
         }
         if !pending.isEmpty { try await Task.sleep(for: .seconds(30)) }
     }
     if !pending.isEmpty {
         print("⚠︎ Neuerungen nicht eingetragen für: \(pending.sorted().joined(separator: ", ")) – später mit --notes erneut ausführen")
+        if let lastError { print("  Letzter Fehler: \(lastError)") }
     }
 }
 print("Fertig.")
