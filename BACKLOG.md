@@ -33,7 +33,8 @@ greift darauf zurück, nicht nur auf das, was Streaming-Anbieter gerade im Angeb
   - Getrennte Anteile, damit Serien nicht von Filmen verdrängt werden: etwa 20'000 Filme und 10'000 Serien.
   - Neuere Titel nach Stimmen pro Jahr seit Erscheinen werten, sonst fehlen die letzten zwei Jahre.
   - Eigenes Kontingent für deutschsprachige Produktionen (DE/CH/AT), die international weniger Stimmen haben.
-  - Ausschliessen: Titel ohne Poster oder Beschreibung, Erwachseneninhalte, bei Serien Talkshows,
+  - Ausschliessen: Titel mit einer IMDb-Bewertung unter 6.0, Titel ohne Poster oder Beschreibung,
+    Erwachseneninhalte, bei Serien Talkshows,
     Nachrichten und Reality-Formate (sofern nicht sehr bekannt).
 - Vorlieben im Profil (alle optional):
   - Lieblings- und unerwünschte Genres.
