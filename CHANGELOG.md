@@ -6,6 +6,8 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+## 1.0.6 – 2026-10-24
+
 - Meine Mediathek mit mehreren Quellen: z. B. NAS und Mac mini nebeneinander. Server im Heimnetz findet die App von selbst – in den Einstellungen erscheinen sie als „Im Netzwerk gefunden“, du gibst nur noch Benutzer und Passwort ein.
 - Mac mini als Mediathek: Das Skript `scripts/mac-mini-webdav.sh` gibt einen Filmordner auf dem Mac frei (nur lesen, mit Passwort) und kündigt ihn im Heimnetz an.
 
