@@ -23,6 +23,13 @@
 		<string>youtube</string>
 		<string>vnd.youtube</string>
 	</array>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_webdav._tcp</string>
+		<string>_webdavs._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Stremio Craft sucht im Heimnetz nach deiner Mediathek (z. B. Mac mini oder NAS) und spielt Videos von dort ab.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Meine Mediathek: das NAS kann unter beliebigem Namen (z. B. …synology.me) mit selbstsigniertem

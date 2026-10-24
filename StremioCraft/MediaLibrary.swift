@@ -3,13 +3,36 @@ import Foundation
 /// Zugang zur eigenen Mediathek auf dem NAS (Synology: Paketzentrum → WebDAV Server, Port 5006 für
 /// HTTPS bzw. 5005 für HTTP). Das Passwort liegt im Schlüsselbund und wird – verschlüsselt wie der
 /// Real-Debrid-Token – mit den anderen Geräten geteilt.
-struct MediaLibraryConfig: Codable, Equatable {
+struct MediaLibraryConfig: Codable, Equatable, Identifiable, Hashable {
+    var id = UUID().uuidString
+    /// Anzeigename, z. B. „Synology“ oder „Mac mini“.
+    var name = "Meine Mediathek"
     /// z. B. `https://192.168.1.10:5006/video`
     var url: String
     var username: String
     var password: String
     /// Selbstsigniertes Zertifikat des NAS akzeptieren (Heimnetz ohne eigenes Zertifikat).
     var allowSelfSigned = true
+
+    init(id: String = UUID().uuidString, name: String = "Meine Mediathek", url: String, username: String, password: String, allowSelfSigned: Bool = true) {
+        self.id = id
+        self.name = name
+        self.url = url
+        self.username = username
+        self.password = password
+        self.allowSelfSigned = allowSelfSigned
+    }
+
+    /// Ältere Stände (eine einzige Mediathek) hatten weder ID noch Namen.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? "default"
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Meine Mediathek"
+        url = try c.decode(String.self, forKey: .url)
+        username = try c.decode(String.self, forKey: .username)
+        password = try c.decodeIfPresent(String.self, forKey: .password) ?? ""
+        allowSelfSigned = try c.decodeIfPresent(Bool.self, forKey: .allowSelfSigned) ?? true
+    }
 
     var baseURL: URL? {
         let text = url.trimmingCharacters(in: .whitespacesAndNewlines)

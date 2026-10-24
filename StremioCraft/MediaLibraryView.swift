@@ -1,10 +1,13 @@
 import SwiftUI
 import UIKit
 
-/// „Meine Mediathek“: Ordner und Videos vom eigenen NAS (WebDAV). Ordner öffnen sich als neue Seite,
-/// Videos spielen direkt – im gewählten Player, die Position wird pro Datei gemerkt.
+/// „Meine Mediathek“: Ordner und Videos von NAS, Mac mini usw. (WebDAV). Mit mehreren Quellen zeigt
+/// die Startseite zuerst die Quellen; Ordner öffnen sich als neue Seite, Videos spielen direkt – im
+/// gewählten Player, die Position wird pro Datei gemerkt.
 struct MediaLibraryView: View {
-    /// `nil` = Startordner aus der Adresse in den Einstellungen.
+    /// `nil` auf der Startseite: die einzige Quelle bzw. die Liste der Quellen.
+    var sourceID: String?
+    /// `nil` = Startordner aus der Adresse der Quelle.
     var href: String?
     var title = "Meine Mediathek"
 
@@ -20,7 +23,20 @@ struct MediaLibraryView: View {
         var entry: LibraryEntry
         var url: URL
         var resume: Double
+        var progressKey: String
         var id: String { entry.id }
+    }
+
+    /// Die angezeigte Quelle; auf der Startseite nur, wenn es genau eine gibt.
+    private var source: MediaLibraryConfig? {
+        if let sourceID { return model.mediaLibrary(id: sourceID) }
+        let all = model.mediaLibraries
+        return all.count == 1 ? all[0] : nil
+    }
+
+    /// Startseite mit mehreren Quellen: zuerst die Quellen als Kacheln.
+    private var showsSources: Bool {
+        sourceID == nil && model.mediaLibraries.count > 1
     }
 
     var body: some View {
@@ -32,7 +48,7 @@ struct MediaLibraryView: View {
                         .lineLimit(1)
                     if isLoading { ProgressView() }
                     Spacer(minLength: 0)
-                    if model.mediaLibrary != nil {
+                    if source != nil {
                         Button { Task { await load() } } label: {
                             Label("Aktualisieren", systemImage: "arrow.clockwise")
                         }
@@ -47,8 +63,21 @@ struct MediaLibraryView: View {
                         .foregroundStyle(.yellow)
                 }
 
-                if model.mediaLibrary == nil {
-                    EmptyHint(text: "Noch keine Mediathek eingerichtet. Unter Einstellungen → „Meine Mediathek (NAS)“ die WebDAV-Adresse deines NAS mit Benutzer und Passwort eintragen.", symbol: "externaldrive.badge.wifi")
+                if showsSources {
+                    grid {
+                        ForEach(model.mediaLibraries) { library in
+                            NavigationLink(value: AppRoute.mediaFolder(library.id, nil, library.name)) {
+                                LibraryTile(
+                                    entry: LibraryEntry(href: library.url, name: library.name, isFolder: true),
+                                    progress: nil,
+                                    symbol: "externaldrive.connected.to.line.below"
+                                )
+                            }
+                            .buttonStyle(PosterButtonStyle())
+                        }
+                    }
+                } else if source == nil {
+                    EmptyHint(text: "Noch keine Mediathek eingerichtet. Unter Einstellungen → „Meine Mediathek“ eine Quelle hinzufügen – Server im Heimnetz (z. B. dein Mac mini) erscheinen dort von selbst.", symbol: "externaldrive.badge.wifi")
                     Button("Zu den Einstellungen") { model.selectedTab = .settings }
                         .buttonStyle(PillButtonStyle(prominent: true))
                 } else if let message {
@@ -58,16 +87,11 @@ struct MediaLibraryView: View {
                 } else if entries.isEmpty && !isLoading {
                     EmptyHint(text: "In diesem Ordner liegen keine Videos.", symbol: "folder")
                 } else {
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: Theme.s(340)), spacing: Theme.s(28))],
-                        alignment: .leading,
-                        spacing: Theme.s(28)
-                    ) {
+                    grid {
                         ForEach(entries) { entry in
                             tile(entry)
                         }
                     }
-                    .tvFocusSection()
                 }
             }
             .padding(.horizontal, Theme.pagePadding)
@@ -75,7 +99,7 @@ struct MediaLibraryView: View {
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
-        .task(id: model.mediaLibrary?.url) { await load() }
+        .task(id: source.map { "\($0.url)|\($0.username)" }) { await load() }
         .fullScreenCover(item: $playing) { item in
             KSPlayerScreen(
                 url: item.url,
@@ -84,20 +108,36 @@ struct MediaLibraryView: View {
                 audioLanguage: model.playbackLanguages.audio,
                 subtitleLanguage: model.playbackLanguages.subtitle
             ) { position, duration in
-                model.saveLibraryPosition(item.entry.href, position: position, duration: duration)
+                model.saveLibraryPosition(item.progressKey, position: position, duration: duration)
             }
         }
+    }
+
+    private func grid(@ViewBuilder _ content: () -> some View) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: Theme.s(340)), spacing: Theme.s(28))],
+            alignment: .leading,
+            spacing: Theme.s(28)
+        ) {
+            content()
+        }
+        .tvFocusSection()
+    }
+
+    /// Position je Quelle und Datei, damit gleiche Pfade auf zwei Servern sich nicht in die Quere kommen.
+    private func progressKey(_ entry: LibraryEntry) -> String {
+        "\(source?.id ?? "")|\(entry.href)"
     }
 
     @ViewBuilder
     private func tile(_ entry: LibraryEntry) -> some View {
         if entry.isFolder {
-            NavigationLink(value: AppRoute.mediaFolder(entry.href, entry.name)) {
+            NavigationLink(value: AppRoute.mediaFolder(source?.id ?? "", entry.href, entry.name)) {
                 LibraryTile(entry: entry, progress: nil)
             }
             .buttonStyle(PosterButtonStyle())
         } else {
-            let position = model.libraryPosition(entry.href)
+            let position = model.libraryPosition(progressKey(entry))
             Button { play(entry, with: model.player, resume: position ?? 0) } label: {
                 LibraryTile(entry: entry, progress: position)
             }
@@ -118,7 +158,7 @@ struct MediaLibraryView: View {
     // MARK: - Laden & Abspielen
 
     private func load() async {
-        guard let config = model.mediaLibrary else {
+        guard let config = source else {
             entries = []
             return
         }
@@ -133,13 +173,13 @@ struct MediaLibraryView: View {
     }
 
     private func play(_ entry: LibraryEntry, with choice: PlayerChoice, resume: Double) {
-        guard let config = model.mediaLibrary, let url = WebDAVClient(config: config).getMediaUrl(entry) else {
+        guard let config = source, let url = WebDAVClient(config: config).getMediaUrl(entry) else {
             message = MediaLibraryError.notConfigured.localizedDescription
             return
         }
         switch choice {
         case .builtIn:
-            playing = Playing(entry: entry, url: url, resume: resume)
+            playing = Playing(entry: entry, url: url, resume: resume, progressKey: progressKey(entry))
         case .infuse:
             if let target = PlaybackView.infuseURL(stream: url, filename: entry.name, position: resume) {
                 openExternal(target, app: "Infuse")
@@ -171,11 +211,13 @@ struct MediaLibraryView: View {
 private struct LibraryTile: View {
     var entry: LibraryEntry
     var progress: Double?
+    /// Eigenes Symbol, z. B. für eine Quelle statt eines Ordners.
+    var symbol: String?
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
         HStack(spacing: Theme.s(20)) {
-            Image(systemName: entry.isFolder ? "folder.fill" : "film")
+            Image(systemName: symbol ?? (entry.isFolder ? "folder.fill" : "film"))
                 .font(.system(size: Theme.s(40), weight: .semibold))
                 .foregroundStyle(entry.isFolder ? Theme.accent : .white.opacity(0.8))
                 .frame(width: Theme.s(64))

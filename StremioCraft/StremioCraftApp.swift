@@ -38,12 +38,13 @@ struct StremioCraftApp: App {
                         model.removeProgress(entry)
                         print("debugRemoveProgress: entfernt", title)
                     }
-                    // Mediathek-Tests: `-debugMediaLibrary "http://127.0.0.1:5005/video|user|pass"` und
-                    // `-debugTab mediaLibrary` öffnet den Bereich direkt.
+                    // Mediathek-Tests: `-debugMediaLibrary "Name|http://127.0.0.1:5005/video|user|pass"`
+                    // (mehrere mit „;“ getrennt) ersetzt die Quellen, `-debugTab mediaLibrary` öffnet den Bereich.
                     if let value = UserDefaults.standard.string(forKey: "debugMediaLibrary") {
-                        let parts = value.components(separatedBy: "|")
-                        if parts.count == 3 {
-                            model.mediaLibrary = MediaLibraryConfig(url: parts[0], username: parts[1], password: parts[2])
+                        model.mediaLibraries = value.components(separatedBy: ";").compactMap { item in
+                            let parts = item.components(separatedBy: "|")
+                            guard parts.count == 4 else { return nil }
+                            return MediaLibraryConfig(id: parts[0], name: parts[0], url: parts[1], username: parts[2], password: parts[3])
                         }
                     }
                     if let tab = UserDefaults.standard.string(forKey: "debugTab").flatMap(AppTab.init(rawValue:)) {
@@ -196,8 +197,8 @@ private struct NavigationTab<Root: View>: View {
                         ProviderView(providerId: id)
                     case .row(let id):
                         RowGridView(rowId: id)
-                    case .mediaFolder(let href, let title):
-                        MediaLibraryView(href: href, title: title)
+                    case .mediaFolder(let sourceID, let href, let title):
+                        MediaLibraryView(sourceID: sourceID, href: href, title: title)
                     }
                 }
         }

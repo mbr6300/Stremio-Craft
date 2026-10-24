@@ -22,6 +22,7 @@ final class AppModel {
     private let streamPreferencesKey = "streamPreferences"
     private let streamMemoryKey = "streamMemory"
     private let mediaLibraryKey = "mediaLibrary"
+    private let mediaLibrariesKey = "mediaLibraries"
     private let libraryProgressKey = "libraryProgress"
     private let profilesKey = "profiles"
     private let activeProfileKey = "activeProfile"
@@ -931,40 +932,76 @@ final class AppModel {
         defaults.set(autoPlay, forKey: autoPlayKey)
     }
 
-    // MARK: - Meine Mediathek (NAS)
+    // MARK: - Meine Mediathek (NAS, Mac mini …)
 
-    /// Zugang zum NAS; Adresse und Benutzer in den Einstellungen, Passwort im Schlüsselbund.
-    var mediaLibrary: MediaLibraryConfig? {
+    /// Alle Quellen der Mediathek; Adressen und Benutzer in den Einstellungen, Passwörter im Schlüsselbund.
+    var mediaLibraries: [MediaLibraryConfig] {
         get {
-            _ = mediaLibraryRevision // Ansichten aktualisieren, wenn sich der Zugang ändert
-            guard var config = defaults.data(forKey: mediaLibraryKey)
-                .flatMap({ try? JSONDecoder().decode(MediaLibraryConfig.self, from: $0) }) else { return nil }
-            config.password = KeychainStore.load(account: Self.mediaLibraryPasswordAccount) ?? ""
-            return config
+            _ = mediaLibraryRevision // Ansichten aktualisieren, wenn sich ein Zugang ändert
+            migrateSingleMediaLibrary()
+            let stored = defaults.data(forKey: mediaLibrariesKey)
+                .flatMap { try? JSONDecoder().decode([MediaLibraryConfig].self, from: $0) } ?? []
+            return stored.map { config in
+                var config = config
+                config.password = KeychainStore.load(account: Self.passwordAccount(config.id)) ?? ""
+                return config
+            }
         }
         set {
-            if var config = newValue {
-                try? KeychainStore.save(config.password, account: Self.mediaLibraryPasswordAccount)
-                config.password = ""
-                save(config, key: mediaLibraryKey)
-            } else {
-                KeychainStore.delete(account: Self.mediaLibraryPasswordAccount)
-                defaults.removeObject(forKey: mediaLibraryKey)
+            let removed = Set(mediaLibraries.map(\.id)).subtracting(newValue.map(\.id))
+            for id in removed { KeychainStore.delete(account: Self.passwordAccount(id)) }
+            let withoutPasswords = newValue.map { config in
+                try? KeychainStore.save(config.password, account: Self.passwordAccount(config.id))
+                var copy = config
+                copy.password = ""
+                return copy
             }
+            save(withoutPasswords, key: mediaLibrariesKey)
             mediaLibraryRevision += 1
         }
     }
     private var mediaLibraryRevision = 0
-    private static let mediaLibraryPasswordAccount = "webdav.password"
 
-    /// Wiedergabeposition von NAS-Dateien (`href` → Sekunden), nur auf diesem Gerät.
-    func libraryPosition(_ href: String) -> Double? {
-        libraryProgress[href]
+    func mediaLibrary(id: String) -> MediaLibraryConfig? {
+        mediaLibraries.first { $0.id == id }
     }
 
-    func saveLibraryPosition(_ href: String, position: Double, duration: Double) {
+    /// Fügt eine Quelle hinzu oder ersetzt die mit gleicher ID.
+    func saveMediaLibrary(_ config: MediaLibraryConfig) {
+        var all = mediaLibraries
+        if let index = all.firstIndex(where: { $0.id == config.id }) { all[index] = config } else { all.append(config) }
+        mediaLibraries = all
+    }
+
+    func removeMediaLibrary(id: String) {
+        mediaLibraries.removeAll { $0.id == id }
+    }
+
+    private static func passwordAccount(_ id: String) -> String { "webdav.password.\(id)" }
+
+    /// Bis 1.0.5 gab es genau eine Mediathek (Schlüssel „mediaLibrary“, Passwort „webdav.password“).
+    private func migrateSingleMediaLibrary() {
+        guard let data = defaults.data(forKey: mediaLibraryKey),
+              let old = try? JSONDecoder().decode(MediaLibraryConfig.self, from: data) else { return }
+        defaults.removeObject(forKey: mediaLibraryKey)
+        var config = old
+        config.name = "NAS"
+        if let password = KeychainStore.load(account: "webdav.password") {
+            try? KeychainStore.save(password, account: Self.passwordAccount(config.id))
+            KeychainStore.delete(account: "webdav.password")
+        }
+        config.password = ""
+        save([config], key: mediaLibrariesKey)
+    }
+
+    /// Wiedergabeposition von Mediathek-Dateien (Quelle + `href` → Sekunden), nur auf diesem Gerät.
+    func libraryPosition(_ key: String) -> Double? {
+        libraryProgress[key]
+    }
+
+    func saveLibraryPosition(_ key: String, position: Double, duration: Double) {
         // Fast fertig geschaut: wieder von vorne beginnen.
-        libraryProgress[href] = duration > 0 && position >= duration * 0.92 ? nil : position
+        libraryProgress[key] = duration > 0 && position >= duration * 0.92 ? nil : position
         defaults.set(libraryProgress, forKey: libraryProgressKey)
     }
 
@@ -1045,7 +1082,7 @@ extension AppModel {
             torrentio: torrentio,
             realDebridToken: KeychainStore.loadToken(),
             streamPreferences: streamPreferences,
-            mediaLibrary: mediaLibrary
+            mediaLibraries: mediaLibraries
         )
     }
 
@@ -1094,7 +1131,9 @@ extension AppModel {
         }
         if let country = snapshot.country { setCountry(country) }
         if let preferences = snapshot.streamPreferences { saveStreamPreferences(preferences) }
-        if let library = snapshot.mediaLibrary, library != mediaLibrary { mediaLibrary = library }
+        if let libraries = snapshot.mediaLibraries ?? snapshot.mediaLibrary.map({ [$0] }), libraries != mediaLibraries {
+            mediaLibraries = libraries
+        }
         if let torrentio = snapshot.torrentio, torrentio != self.torrentio {
             self.torrentio = torrentio
             save(torrentio, key: torrentioKey)
