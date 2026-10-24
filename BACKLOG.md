@@ -54,6 +54,12 @@ Fortsetzungen weit oben.
 Oben im Raster der Empfehlungen eine Umschaltung: „Nur neue Vorschläge“ (noch ohne ♥, wie heute)
 oder „Mit Lieblingstiteln“ (beherzte Titel dazwischen).
 
+### Mediathek: direkte SMB-Freigaben (Mac, Windows, NAS)
+Normale Dateifreigaben ohne Zusatzprogramm einbinden (macOS: Teilen → Dateifreigabe). Bonjour-Suche um
+`_smb._tcp` erweitern; SMB-Bibliothek (z. B. AMSMB2, LGPL) für Ordnerlisten. Der Player kann kein SMB,
+darum Dateien über einen kleinen lokalen HTTP-Zwischenserver in der App mit Range-Anfragen
+weiterreichen (Vor-/Zurückspulen grosser Dateien sorgfältig testen). Aufwand etwa 1–2 Tage.
+
 ## Erledigt
 
 - Unveröffentlicht: eigene Titeldatenbank auf Cloudflare (rund 30'000 Filme und Serien, IMDb ab 6.0,
