@@ -324,6 +324,8 @@ enum AppRoute: Hashable {
     case provider(String)
     /// Vollständige Startseiten-Reihe als Raster.
     case row(String)
+    /// Ordner der eigenen Mediathek (WebDAV-`href`, Anzeigename).
+    case mediaFolder(String, String)
 }
 
 extension AppRoute {

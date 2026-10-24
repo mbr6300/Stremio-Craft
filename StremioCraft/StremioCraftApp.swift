@@ -38,6 +38,17 @@ struct StremioCraftApp: App {
                         model.removeProgress(entry)
                         print("debugRemoveProgress: entfernt", title)
                     }
+                    // Mediathek-Tests: `-debugMediaLibrary "http://127.0.0.1:5005/video|user|pass"` und
+                    // `-debugTab mediaLibrary` öffnet den Bereich direkt.
+                    if let value = UserDefaults.standard.string(forKey: "debugMediaLibrary") {
+                        let parts = value.components(separatedBy: "|")
+                        if parts.count == 3 {
+                            model.mediaLibrary = MediaLibraryConfig(url: parts[0], username: parts[1], password: parts[2])
+                        }
+                    }
+                    if let tab = UserDefaults.standard.string(forKey: "debugTab").flatMap(AppTab.init(rawValue:)) {
+                        model.selectedTab = tab
+                    }
                     // Sync-Tests: `-syncReset YES` beendet den Sync auf diesem Gerät.
                     if UserDefaults.standard.bool(forKey: "syncReset") { Task { await sync.leave() } }
                     // Kopplung ohne Fernbedienung testen: `-syncStartPairing YES` zeigt sofort eine PIN.
@@ -72,7 +83,7 @@ struct StremioCraftApp: App {
 }
 
 enum AppTab: String, Hashable {
-    case profiles, home, categories, search, library, settings
+    case profiles, home, categories, search, library, mediaLibrary, settings
 }
 
 /// Seitenleiste wie in der Apple-TV-App (tvOS 18): am linken Rand nach links öffnet das Menü.
@@ -133,6 +144,9 @@ struct RootView: View {
             Tab("Bibliothek", systemImage: "rectangle.stack", value: AppTab.library) {
                 NavigationTab { LibraryView() }
             }
+            Tab("Meine Mediathek", systemImage: "externaldrive.connected.to.line.below", value: AppTab.mediaLibrary) {
+                NavigationTab { MediaLibraryView() }
+            }
             Tab("Einstellungen", systemImage: "gearshape", value: AppTab.settings) {
                 NavigationTab { SettingsView() }
             }
@@ -182,6 +196,8 @@ private struct NavigationTab<Root: View>: View {
                         ProviderView(providerId: id)
                     case .row(let id):
                         RowGridView(rowId: id)
+                    case .mediaFolder(let href, let title):
+                        MediaLibraryView(href: href, title: title)
                     }
                 }
         }

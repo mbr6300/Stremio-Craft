@@ -54,6 +54,7 @@ struct QuickMenu: View {
         (.categories, "Kategorien", "square.grid.2x2"),
         (.search, "Suche", "magnifyingglass"),
         (.library, "Bibliothek", "rectangle.stack"),
+        (.mediaLibrary, "Meine Mediathek", "externaldrive.connected.to.line.below"),
         (.settings, "Einstellungen", "gearshape")
     ]
 

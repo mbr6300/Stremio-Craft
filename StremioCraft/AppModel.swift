@@ -21,6 +21,8 @@ final class AppModel {
     private let autoPlayKey = "autoPlayBest"
     private let streamPreferencesKey = "streamPreferences"
     private let streamMemoryKey = "streamMemory"
+    private let mediaLibraryKey = "mediaLibrary"
+    private let libraryProgressKey = "libraryProgress"
     private let profilesKey = "profiles"
     private let activeProfileKey = "activeProfile"
     private let zoomKey = "uiZoom"
@@ -42,6 +44,7 @@ final class AppModel {
     private(set) var streamPreferences = StreamPreferences()
     /// Zuletzt gewählter Stream je Serie ("tv-<id>"), nur auf diesem Gerät.
     @ObservationIgnored private var streamMemory: [String: StreamMemory] = [:]
+    private var libraryProgress: [String: Double] = [:]
     var continueWatching: [WatchProgress] = []
     var favorites: [FavoriteItem] = []
     var rows: [CatalogRow] = []
@@ -127,6 +130,7 @@ final class AppModel {
            let stored = try? JSONDecoder().decode(StreamPreferences.self, from: data) {
             streamPreferences = stored
         }
+        libraryProgress = defaults.dictionary(forKey: libraryProgressKey) as? [String: Double] ?? [:]
         if let data = defaults.data(forKey: streamMemoryKey),
            let stored = try? JSONDecoder().decode([String: StreamMemory].self, from: data) {
             streamMemory = stored
@@ -927,6 +931,43 @@ final class AppModel {
         defaults.set(autoPlay, forKey: autoPlayKey)
     }
 
+    // MARK: - Meine Mediathek (NAS)
+
+    /// Zugang zum NAS; Adresse und Benutzer in den Einstellungen, Passwort im Schlüsselbund.
+    var mediaLibrary: MediaLibraryConfig? {
+        get {
+            _ = mediaLibraryRevision // Ansichten aktualisieren, wenn sich der Zugang ändert
+            guard var config = defaults.data(forKey: mediaLibraryKey)
+                .flatMap({ try? JSONDecoder().decode(MediaLibraryConfig.self, from: $0) }) else { return nil }
+            config.password = KeychainStore.load(account: Self.mediaLibraryPasswordAccount) ?? ""
+            return config
+        }
+        set {
+            if var config = newValue {
+                try? KeychainStore.save(config.password, account: Self.mediaLibraryPasswordAccount)
+                config.password = ""
+                save(config, key: mediaLibraryKey)
+            } else {
+                KeychainStore.delete(account: Self.mediaLibraryPasswordAccount)
+                defaults.removeObject(forKey: mediaLibraryKey)
+            }
+            mediaLibraryRevision += 1
+        }
+    }
+    private var mediaLibraryRevision = 0
+    private static let mediaLibraryPasswordAccount = "webdav.password"
+
+    /// Wiedergabeposition von NAS-Dateien (`href` → Sekunden), nur auf diesem Gerät.
+    func libraryPosition(_ href: String) -> Double? {
+        libraryProgress[href]
+    }
+
+    func saveLibraryPosition(_ href: String, position: Double, duration: Double) {
+        // Fast fertig geschaut: wieder von vorne beginnen.
+        libraryProgress[href] = duration > 0 && position >= duration * 0.92 ? nil : position
+        defaults.set(libraryProgress, forKey: libraryProgressKey)
+    }
+
     func saveStreamPreferences(_ preferences: StreamPreferences) {
         guard preferences != streamPreferences else { return }
         streamPreferences = preferences
@@ -1003,7 +1044,8 @@ extension AppModel {
             country: country,
             torrentio: torrentio,
             realDebridToken: KeychainStore.loadToken(),
-            streamPreferences: streamPreferences
+            streamPreferences: streamPreferences,
+            mediaLibrary: mediaLibrary
         )
     }
 
@@ -1052,6 +1094,7 @@ extension AppModel {
         }
         if let country = snapshot.country { setCountry(country) }
         if let preferences = snapshot.streamPreferences { saveStreamPreferences(preferences) }
+        if let library = snapshot.mediaLibrary, library != mediaLibrary { mediaLibrary = library }
         if let torrentio = snapshot.torrentio, torrentio != self.torrentio {
             self.torrentio = torrentio
             save(torrentio, key: torrentioKey)

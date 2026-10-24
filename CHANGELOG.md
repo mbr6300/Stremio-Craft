@@ -6,6 +6,8 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+- Meine Mediathek: Eigene Filme und Serien vom NAS (z. B. Synology) direkt in der App ansehen. Im Menü gibt es dafür den neuen Punkt „Meine Mediathek“; eingerichtet wird sie unter Einstellungen → „Meine Mediathek (NAS)“ mit Adresse, Benutzer und Passwort. Ordner lassen sich durchblättern, Videos starten im gewohnten Player, und die App merkt sich, wo du aufgehört hast.
+
 ## 1.0.3 – 2026-10-22
 
 - Bessere Empfehlungen: „Empfohlen für dich“ wählt jetzt aus rund 30'000 gut bewerteten Filmen und Serien und richtet sich nach dem, was du magst, gemerkt oder schon geschaut hast.

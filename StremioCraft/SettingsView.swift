@@ -11,6 +11,10 @@ struct SettingsView: View {
     @State private var player: PlayerChoice = .platformDefault
     @State private var autoPlay = true
     @State private var streamPrefs = StreamPreferences()
+    @State private var libraryURL = ""
+    @State private var libraryUser = ""
+    @State private var libraryPassword = ""
+    @State private var librarySelfSigned = true
     @State private var tokenDraft = ""
     @State private var status = ""
     @State private var isBusy = false
@@ -94,6 +98,39 @@ struct SettingsView: View {
                 Text("Real-Debrid")
             } footer: {
                 Text("Token unter real-debrid.com/apitoken. Am einfachsten mit der Tastatur auf dem iPhone einfügen.")
+            }
+
+            Section {
+                TextField("Adresse, z. B. https://192.168.1.10:5006/video", text: $libraryURL)
+                    .textContentType(.URL)
+                    .autocorrectionDisabled()
+                    #if !os(tvOS)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    #endif
+                TextField("Benutzer", text: $libraryUser)
+                    .textContentType(.username)
+                    .autocorrectionDisabled()
+                    #if !os(tvOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                SecureField(model.mediaLibrary == nil ? "Passwort" : "Passwort (leer lassen = unverändert)", text: $libraryPassword)
+                Toggle("Selbstsigniertes Zertifikat erlauben", isOn: $librarySelfSigned)
+                Button("Verbindung prüfen und sichern") { Task { await saveLibrary() } }
+                    .disabled(isBusy)
+                if model.mediaLibrary != nil {
+                    Button("Mediathek entfernen", role: .destructive) {
+                        model.mediaLibrary = nil
+                        libraryURL = ""
+                        libraryUser = ""
+                        libraryPassword = ""
+                        status = "Mediathek entfernt."
+                    }
+                }
+            } header: {
+                Text("Meine Mediathek (NAS)")
+            } footer: {
+                Text("Eigene Filme und Serien per WebDAV, z. B. von einer Synology (Paketzentrum → WebDAV Server; HTTPS-Port 5006, HTTP 5005). Am besten einen eigenen NAS-Benutzer ohne Zwei-Faktor-Anmeldung und nur mit Lesezugriff anlegen. Der Zugang wird mit deinen anderen Geräten geteilt.")
             }
 
             Section {
@@ -183,6 +220,36 @@ struct SettingsView: View {
         player = model.player
         autoPlay = model.autoPlayBest
         streamPrefs = model.streamPreferences
+        if let library = model.mediaLibrary {
+            libraryURL = library.url
+            libraryUser = library.username
+            librarySelfSigned = library.allowSelfSigned
+        }
+    }
+
+    /// Erst speichern, wenn das NAS mit diesen Angaben antwortet.
+    private func saveLibrary() async {
+        let password = libraryPassword.isEmpty ? (model.mediaLibrary?.password ?? "") : libraryPassword
+        let config = MediaLibraryConfig(
+            url: libraryURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            username: libraryUser.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: password,
+            allowSelfSigned: librarySelfSigned
+        )
+        guard config.isComplete else {
+            status = "Bitte Adresse (mit http:// oder https://), Benutzer und Passwort eintragen."
+            return
+        }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let entries = try await WebDAVClient(config: config).fetchLibraryFiles()
+            model.mediaLibrary = config
+            libraryPassword = ""
+            status = "Verbunden – \(entries.count) Ordner und Videos im Startordner."
+        } catch {
+            status = error.localizedDescription
+        }
     }
 
     private func saveOptions() {

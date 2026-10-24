@@ -101,6 +101,8 @@ struct SyncSnapshot: Codable, Equatable {
     var devices: [SyncDevice]?
     /// Regeln für die Stream-Vorauswahl (fehlt in älteren Ständen).
     var streamPreferences: StreamPreferences?
+    /// NAS-Zugang (Adresse, Benutzer, Passwort) – der ganze Stand ist Ende-zu-Ende verschlüsselt.
+    var mediaLibrary: MediaLibraryConfig?
 
     /// Nur die geteilten Inhalte – ohne Geräteliste, die das AppModel nicht betrifft.
     var sharedData: SyncSnapshot {
@@ -163,6 +165,7 @@ enum SyncMerge {
         result.country = value(base.country, local.country, remote.country, preferRemote: joining)
         result.torrentio = value(base.torrentio, local.torrentio, remote.torrentio, preferRemote: joining)
         result.streamPreferences = value(base.streamPreferences, local.streamPreferences, remote.streamPreferences, preferRemote: joining)
+        result.mediaLibrary = value(base.mediaLibrary, local.mediaLibrary, remote.mediaLibrary, preferRemote: joining && remote.mediaLibrary != nil)
         result.realDebridToken = value(base.realDebridToken, local.realDebridToken, remote.realDebridToken, preferRemote: joining && remote.realDebridToken != nil)
         result.devices = keyed(base.devices ?? [], local.devices ?? [], remote.devices ?? [], id: \.id) { mine, theirs in
             mine.lastSeen >= theirs.lastSeen ? mine : theirs
