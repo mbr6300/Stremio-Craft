@@ -6,6 +6,8 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+## 1.0.5 – 2026-10-24
+
 - Meine Mediathek: Das NAS lässt sich jetzt auch unter seinem Namen (z. B. …synology.me) mit selbstsigniertem Zertifikat einbinden, nicht nur über die IP-Adresse.
 - Einstellungen: Jeder Zugang zeigt auf einen Blick, ob er funktioniert – grünes Häkchen = eingerichtet und geprüft, orangener Kreis = fehlt noch, rotes Warnzeichen = Fehler (Real-Debrid, TMDB, Torrentio, Mediathek, Geräte-Sync). Dazu mehr Abstand zwischen den Abschnitten und besser lesbare Titel.
 
