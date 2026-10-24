@@ -107,6 +107,9 @@ final class WebDAVClient: NSObject, URLSessionDelegate {
         } catch let error as URLError where [.serverCertificateUntrusted, .serverCertificateHasBadDate,
                                               .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
                                               .secureConnectionFailed].contains(error.code) {
+            #if DEBUG
+            print("WebDAV TLS:", error, error.userInfo)
+            #endif
             throw MediaLibraryError.certificate
         } catch {
             throw MediaLibraryError.network(error.localizedDescription)

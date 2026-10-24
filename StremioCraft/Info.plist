@@ -25,9 +25,11 @@
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
+		<!-- Meine Mediathek: das NAS kann unter beliebigem Namen (z. B. …synology.me) mit selbstsigniertem
+		     Zertifikat oder per http erreichbar sein. Die Zertifikatsprüfung bleibt für alle anderen Server
+		     aktiv; nur WebDAVClient akzeptiert ein selbstsigniertes Zertifikat, und nur für den NAS-Host.
+		     Kein NSAllowsLocalNetworking dazu: dann ignoriert iOS NSAllowsArbitraryLoads. -->
 		<key>NSAllowsArbitraryLoads</key>
-		<false/>
-		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 </dict>
