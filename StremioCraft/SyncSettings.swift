@@ -24,9 +24,9 @@ struct SyncSettingsSection: View {
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Geräte-Sync")
+            SettingsHeader(title: "Geräte-Sync", status: syncStatus)
         } footer: {
-            Text("Meine Liste, Lieblingstitel, Gesehenes, „Weiterschauen“, Profile, Listen und der Real-Debrid-Token werden über alle Geräte mit demselben Sync-Code geteilt – ohne Login. Die Daten werden auf dem Gerät verschlüsselt; der Server sieht nur unlesbare Daten.")
+            SettingsFooter("Meine Liste, Lieblingstitel, Gesehenes, „Weiterschauen“, Profile, Listen und der Real-Debrid-Token werden über alle Geräte mit demselben Sync-Code geteilt – ohne Login. Die Daten werden auf dem Gerät verschlüsselt; der Server sieht nur unlesbare Daten.")
         }
 
         if sync.isEnabled {
@@ -42,8 +42,10 @@ struct SyncSettingsSection: View {
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
                 #endif
+        } header: {
+            SettingsHeader(title: "Sync-Server")
         } footer: {
-            Text(sync.serverURL.map { "Aktuell: \($0.absoluteString)" } ?? "Kein Server – SYNC_URL in LocalSecrets.plist eintragen oder hier die Worker-Adresse angeben.")
+            SettingsFooter(sync.serverURL.map { "Aktuell: \($0.absoluteString)" } ?? "Kein Server – SYNC_URL in LocalSecrets.plist eintragen oder hier die Worker-Adresse angeben.")
         }
     }
 
@@ -118,9 +120,9 @@ struct SyncSettingsSection: View {
                 .onSubmit { Task { await sync.renameDevice(nameDraft) } }
                 .onAppear { if nameDraft.isEmpty { nameDraft = sync.deviceName } }
         } header: {
-            Text("Verbundene Geräte")
+            SettingsHeader(title: "Verbundene Geräte")
         } footer: {
-            Text("Gedrückt halten entfernt ein altes Gerät aus der Liste. Kennt es den Sync-Code noch, erscheint es beim nächsten Abgleich wieder.")
+            SettingsFooter("Gedrückt halten entfernt ein altes Gerät aus der Liste. Kennt es den Sync-Code noch, erscheint es beim nächsten Abgleich wieder.")
         }
     }
 
@@ -168,6 +170,17 @@ struct SyncSettingsSection: View {
             }
         }
         .disabled(busy)
+    }
+
+    /// ✓ verbunden, ◌ nicht eingerichtet bzw. ohne Server, ⚠︎ letzter Abgleich fehlgeschlagen.
+    private var syncStatus: ConfigStatus {
+        guard sync.serverURL != nil else { return .missing("Kein Server") }
+        switch sync.phase {
+        case .off: return sync.pairingPIN == nil ? .missing("Nicht verbunden") : .checking
+        case .syncing: return .checking
+        case .failed: return .failed("Abgleich fehlgeschlagen")
+        case .idle: return .ok("Verbunden")
+        }
     }
 
     private var statusText: String {

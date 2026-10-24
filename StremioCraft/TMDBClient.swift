@@ -373,6 +373,11 @@ enum TMDBClient {
         return Int(date.prefix(4))
     }
 
+    /// Prüft den Schlüssel mit einer kleinen Anfrage (Einstellungen); wirft bei ungültigem Schlüssel.
+    static func validate(apiKey: String) async throws {
+        _ = try await data(from: makeURL("/configuration", ["api_key": apiKey]))
+    }
+
     private static func makeURL(_ path: String, _ query: [String: String]) throws -> URL {
         guard var components = URLComponents(string: base + path) else {
             throw AppFailure.message("Ungültige TMDB-Adresse.")

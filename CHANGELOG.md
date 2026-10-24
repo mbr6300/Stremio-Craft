@@ -6,6 +6,9 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+- Meine Mediathek: Das NAS lässt sich jetzt auch unter seinem Namen (z. B. …synology.me) mit selbstsigniertem Zertifikat einbinden, nicht nur über die IP-Adresse.
+- Einstellungen: Jeder Zugang zeigt auf einen Blick, ob er funktioniert – grünes Häkchen = eingerichtet und geprüft, orangener Kreis = fehlt noch, rotes Warnzeichen = Fehler (Real-Debrid, TMDB, Torrentio, Mediathek, Geräte-Sync). Dazu mehr Abstand zwischen den Abschnitten und besser lesbare Titel.
+
 ## 1.0.4 – 2026-10-24
 
 - Meine Mediathek: Eigene Filme und Serien vom NAS (z. B. Synology) direkt in der App ansehen. Im Menü gibt es dafür den neuen Punkt „Meine Mediathek“; eingerichtet wird sie unter Einstellungen → „Meine Mediathek (NAS)“ mit Adresse, Benutzer und Passwort. Ordner lassen sich durchblättern, Videos starten im gewohnten Player, und die App merkt sich, wo du aufgehört hast.

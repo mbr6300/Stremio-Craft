@@ -19,20 +19,26 @@ struct SettingsView: View {
     @State private var status = ""
     @State private var isBusy = false
     @State private var loaded = false
+    @State private var realDebridStatus: ConfigStatus = .checking
+    @State private var tmdbStatus: ConfigStatus = .checking
+    @State private var torrentioStatus: ConfigStatus = .checking
+    @State private var libraryStatus: ConfigStatus = .checking
 
     var body: some View {
         Form {
-            Section("Hilfe") {
+            Section {
                 Button {
                     model.showHelp = true
                 } label: {
                     Label("Tipps & versteckte Funktionen anzeigen", systemImage: "questionmark.circle")
                 }
+            } header: {
+                SettingsHeader(title: "Hilfe")
             }
 
             SyncSettingsSection()
 
-            Section("Startseite") {
+            Section {
                 NavigationLink(value: AppRoute.lists) {
                     LabeledContent("Listen & Reihen", value: "\(model.catalogs.filter(\.enabled).count) aktiv")
                 }
@@ -42,6 +48,8 @@ struct SettingsView: View {
                 if !Platform.isTV {
                     zoomControl
                 }
+            } header: {
+                SettingsHeader(title: "Startseite")
             }
 
             Section {
@@ -50,9 +58,9 @@ struct SettingsView: View {
                 }
                 Toggle("Besten sofort verfügbaren Stream automatisch starten", isOn: $autoPlay)
             } header: {
-                Text("Wiedergabe")
+                SettingsHeader(title: "Wiedergabe")
             } footer: {
-                Text("Der integrierte Player spielt MKV und MP4 mit allen Ton- und Untertitelspuren und merkt sich die Position für „Weiterschauen“ selbst. Infuse kann zusätzlich Dolby Vision und Atmos am besten ausgeben und meldet die Position beim Schliessen zurück. VLC spielt fast alle Formate, startet aber immer von vorne und meldet keine Position.")
+                SettingsFooter("Der integrierte Player spielt MKV und MP4 mit allen Ton- und Untertitelspuren und merkt sich die Position für „Weiterschauen“ selbst. Infuse kann zusätzlich Dolby Vision und Atmos am besten ausgeben und meldet die Position beim Schliessen zurück. VLC spielt fast alle Formate, startet aber immer von vorne und meldet keine Position.")
             }
 
             Section {
@@ -77,14 +85,13 @@ struct SettingsView: View {
                     Text("Englisch").tag(String?.some("en"))
                 }
             } header: {
-                Text("Stream-Auswahl")
+                SettingsHeader(title: "Stream-Auswahl")
             } footer: {
-                Text("Sofort verfügbare Streams kommen immer zuerst; danach ordnen diese Regeln die Liste und bestimmen, welcher Stream automatisch startet. Bei Serien bevorzugt die App ausserdem die Gruppe und Auflösung, die du zuletzt gewählt hast.")
+                SettingsFooter("Sofort verfügbare Streams kommen immer zuerst; danach ordnen diese Regeln die Liste und bestimmen, welcher Stream automatisch startet. Bei Serien bevorzugt die App ausserdem die Gruppe und Auflösung, die du zuletzt gewählt hast.")
             }
 
             Section {
-                LabeledContent("Status", value: model.hasRealDebridToken ? "Token im Schlüsselbund" : "Kein Token")
-                SecureField("API-Token einfügen", text: $tokenDraft)
+                SecureField(model.hasRealDebridToken ? "Neuen API-Token einfügen" : "API-Token einfügen", text: $tokenDraft)
                 Button("Token prüfen und sichern") { Task { await saveToken() } }
                     .disabled(isBusy)
                 if model.hasRealDebridToken {
@@ -92,12 +99,13 @@ struct SettingsView: View {
                         try? model.setRealDebridToken(nil)
                         tokenDraft = ""
                         status = "Token entfernt."
+                        Task { await runChecks() }
                     }
                 }
             } header: {
-                Text("Real-Debrid")
+                SettingsHeader(title: "Real-Debrid", status: realDebridStatus)
             } footer: {
-                Text("Token unter real-debrid.com/apitoken. Am einfachsten mit der Tastatur auf dem iPhone einfügen.")
+                SettingsFooter("Token unter real-debrid.com/apitoken. Am einfachsten mit der Tastatur auf dem iPhone einfügen.")
             }
 
             Section {
@@ -125,12 +133,13 @@ struct SettingsView: View {
                         libraryUser = ""
                         libraryPassword = ""
                         status = "Mediathek entfernt."
+                        Task { await runChecks() }
                     }
                 }
             } header: {
-                Text("Meine Mediathek (NAS)")
+                SettingsHeader(title: "Meine Mediathek (NAS)", status: libraryStatus)
             } footer: {
-                Text("Eigene Filme und Serien per WebDAV, z. B. von einer Synology (Paketzentrum → WebDAV Server; HTTPS-Port 5006, HTTP 5005). Am besten einen eigenen NAS-Benutzer ohne Zwei-Faktor-Anmeldung und nur mit Lesezugriff anlegen. Der Zugang wird mit deinen anderen Geräten geteilt.")
+                SettingsFooter("Eigene Filme und Serien per WebDAV, z. B. von einer Synology (Paketzentrum → WebDAV Server; HTTPS-Port 5006, HTTP 5005). Am besten einen eigenen NAS-Benutzer ohne Zwei-Faktor-Anmeldung und nur mit Lesezugriff anlegen. Der Zugang wird mit deinen anderen Geräten geteilt.")
             }
 
             Section {
@@ -147,18 +156,17 @@ struct SettingsView: View {
                 Button("Manifest prüfen") { Task { await checkManifest() } }
                     .disabled(isBusy)
             } header: {
-                Text("Torrentio")
+                SettingsHeader(title: "Torrentio", status: torrentioStatus)
             } footer: {
-                Text(TorrentioConfig.maskedManifest(options: currentOptions, realDebridToken: KeychainStore.loadToken()))
+                SettingsFooter(TorrentioConfig.maskedManifest(options: currentOptions, realDebridToken: KeychainStore.loadToken()))
             }
 
             Section {
                 TextField("TMDB-API-Schlüssel (optional)", text: $tmdbKey)
-                LabeledContent("Status", value: model.hasTMDBKey ? "Schlüssel vorhanden" : "Fehlt – Kataloge bleiben leer")
             } header: {
-                Text("TMDB")
+                SettingsHeader(title: "TMDB", status: tmdbStatus)
             } footer: {
-                Text("Leer lassen, wenn LocalSecrets.plist einen Schlüssel enthält.")
+                SettingsFooter("Leer lassen, wenn LocalSecrets.plist einen Schlüssel enthält. Ohne gültigen Schlüssel bleiben die Kataloge leer.")
             }
 
             if isBusy || !status.isEmpty {
@@ -170,7 +178,11 @@ struct SettingsView: View {
                 }
             }
         }
+        #if !os(tvOS)
+        .listSectionSpacing(.custom(28))
+        #endif
         .onAppear(perform: load)
+        .task { await runChecks() }
         .onDisappear(perform: saveOptions)
         .onChange(of: country) { saveOptions() }
         .onChange(of: sort) { saveOptions() }
@@ -227,6 +239,60 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Status
+
+    /// Prüft alle Zugänge gleichzeitig; das Ergebnis erscheint als Symbol im jeweiligen Abschnittstitel.
+    private func runChecks() async {
+        async let realDebrid = checkRealDebrid()
+        async let tmdb = checkTMDB()
+        async let torrentio = checkTorrentio()
+        async let library = checkLibrary()
+        (realDebridStatus, tmdbStatus, torrentioStatus, libraryStatus) = await (realDebrid, tmdb, torrentio, library)
+    }
+
+    private func checkRealDebrid() async -> ConfigStatus {
+        guard let token = KeychainStore.loadToken() else { return .missing("Kein Token") }
+        do {
+            return .ok("Angemeldet als \(try await RealDebridClient.validate(token: token))")
+        } catch {
+            return .failed("Token ungültig")
+        }
+    }
+
+    private func checkTMDB() async -> ConfigStatus {
+        let key = model.tmdbAPIKey
+        guard !key.isEmpty else { return .missing("Schlüssel fehlt") }
+        do {
+            try await TMDBClient.validate(apiKey: key)
+            return .ok("Schlüssel gültig")
+        } catch {
+            return .failed(error.localizedDescription.contains("ungültig") ? "Schlüssel ungültig" : "Nicht erreichbar")
+        }
+    }
+
+    private func checkTorrentio() async -> ConfigStatus {
+        do {
+            _ = try await TorrentioClient.manifestName(options: model.torrentio, token: KeychainStore.loadToken())
+            return .ok("Erreichbar")
+        } catch {
+            return .failed("Nicht erreichbar")
+        }
+    }
+
+    private func checkLibrary() async -> ConfigStatus {
+        guard let config = model.mediaLibrary else { return .missing("Nicht eingerichtet") }
+        do {
+            _ = try await WebDAVClient(config: config).fetchLibraryFiles()
+            return .ok("Verbunden")
+        } catch MediaLibraryError.unauthorized {
+            return .failed("Anmeldung fehlgeschlagen")
+        } catch MediaLibraryError.certificate {
+            return .failed("Zertifikat abgelehnt")
+        } catch {
+            return .failed("Nicht erreichbar")
+        }
+    }
+
     /// Erst speichern, wenn das NAS mit diesen Angaben antwortet.
     private func saveLibrary() async {
         let password = libraryPassword.isEmpty ? (model.mediaLibrary?.password ?? "") : libraryPassword
@@ -247,6 +313,7 @@ struct SettingsView: View {
             model.mediaLibrary = config
             libraryPassword = ""
             status = "Verbunden – \(entries.count) Ordner und Videos im Startordner."
+            libraryStatus = .ok("Verbunden")
         } catch {
             status = error.localizedDescription
         }
@@ -254,7 +321,9 @@ struct SettingsView: View {
 
     private func saveOptions() {
         guard loaded else { return }
+        let keyChanged = tmdbKey != model.tmdbKeyOverride
         model.saveSettings(country: country, tmdbKey: tmdbKey, torrentio: currentOptions)
+        if keyChanged { Task { tmdbStatus = await checkTMDB() } }
     }
 
     private func saveToken() async {
@@ -270,6 +339,7 @@ struct SettingsView: View {
             try model.setRealDebridToken(token)
             tokenDraft = ""
             status = "Token gespeichert. Angemeldet als \(name)."
+            realDebridStatus = .ok("Angemeldet als \(name)")
         } catch {
             status = error.localizedDescription
         }
@@ -281,8 +351,10 @@ struct SettingsView: View {
         do {
             let name = try await TorrentioClient.manifestName(options: currentOptions, token: KeychainStore.loadToken())
             status = "Manifest erreichbar: \(name)."
+            torrentioStatus = .ok("Erreichbar")
         } catch {
             status = error.localizedDescription
+            torrentioStatus = .failed("Nicht erreichbar")
         }
     }
 }
