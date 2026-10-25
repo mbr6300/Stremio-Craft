@@ -6,6 +6,8 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+## 1.0.7 – 2026-10-25
+
 - Neu auch fürs iPhone: Stremio Craft läuft jetzt auf dem iPhone, mit angepassten Grössen. Die Knöpfe auf der Detailseite lassen sich seitlich wischen, Kategorien stehen zu zweit nebeneinander.
 
 ## 1.0.6 – 2026-10-24
