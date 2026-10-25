@@ -30,10 +30,13 @@ struct SearchView: View {
                     .tvFocusSection()
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Theme.pagePadding)
             .padding(.vertical, Theme.s(40))
         }
         .scrollClipDisabled()
+        // Volle Breite, sonst bleibt auf dem iPhone links und rechts ein schwarzer Rand.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background.ignoresSafeArea())
         .searchable(text: $query, prompt: "Film oder Serie")
         .onSubmit(of: .search) { model.addRecentSearch(query) }

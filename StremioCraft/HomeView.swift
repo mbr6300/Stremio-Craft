@@ -85,7 +85,7 @@ private struct TouchHome: View {
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .always))
-                    .frame(height: 380)
+                    .frame(height: FeaturedBanner.height)
                 }
                 HStack(spacing: 12) {
                     FilterPicker()
@@ -117,12 +117,10 @@ private struct FeaturedBanner: View {
     var item: MediaItem
     @State private var imdb: IMDbInfo?
 
+    static var height: CGFloat { Platform.isPhone ? 300 : 380 }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            RemoteImage(url: item.backdropURL, maxPoints: 1280, placeholderSymbol: "film")
-                .frame(maxWidth: .infinity)
-                .frame(height: 380)
-                .clipped()
             LinearGradient(colors: [.clear, Theme.background.opacity(0.75), Theme.background],
                            startPoint: .center, endPoint: .bottom)
             LinearGradient(colors: [Theme.background.opacity(0.7), .clear],
@@ -142,7 +140,14 @@ private struct FeaturedBanner: View {
             .padding(.horizontal, Theme.pagePadding)
             .padding(.bottom, 40)
         }
-        .frame(height: 380)
+        .frame(maxWidth: .infinity)
+        .frame(height: Self.height)
+        // Als Hintergrund, damit das Bild (Seitenverhältnis füllen) die Breite nicht vorgibt –
+        // sonst ragt der Banner auf dem iPhone über den Bildschirm hinaus.
+        .background {
+            RemoteImage(url: item.backdropURL, maxPoints: 1280, placeholderSymbol: "film")
+        }
+        .clipped()
         .task(id: item.id) {
             imdb = await IMDbClient.shared.info(for: item, apiKey: model.tmdbAPIKey)
         }

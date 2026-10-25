@@ -97,6 +97,7 @@ struct ProfilesView: View {
                 .foregroundStyle(.white.opacity(0.55))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: Theme.s(1100))
+                .padding(.horizontal, Theme.pagePadding)
             if !model.profiles.isEmpty {
                 Button(editing ? "Fertig" : "Profile verwalten") { editing.toggle() }
                     .buttonStyle(PillButtonStyle(selected: editing))

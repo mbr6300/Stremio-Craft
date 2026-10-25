@@ -7,8 +7,9 @@ enum Theme {
     static let background = Color(red: 0.035, green: 0.05, blue: 0.11)
     static let surface = Color.white.opacity(0.07)
 
-    /// Masse sind für den Fernseher (1920 pt breit) entworfen; auf iPad und Mac werden sie verkleinert.
-    private static let baseScale: CGFloat = Platform.isTV ? 1 : 0.62
+    /// Masse sind für den Fernseher (1920 pt breit) entworfen; auf iPad und Mac werden sie verkleinert,
+    /// auf dem iPhone noch etwas mehr.
+    private static let baseScale: CGFloat = Platform.isTV ? 1 : (Platform.isPhone ? 0.5 : 0.62)
 
     /// Einstellbare Darstellungsgrösse auf iPad und Mac (1 = Standard des iPads).
     /// Wird nur vom `AppModel` gesetzt; die Oberfläche wird danach neu aufgebaut.
@@ -21,7 +22,7 @@ enum Theme {
 
     static var posterSize: CGSize { CGSize(width: s(200), height: s(300)) }
     static var stillSize: CGSize { CGSize(width: s(352), height: s(198)) }
-    static var pagePadding: CGFloat { Platform.isTV ? 80 : s(38) }
+    static var pagePadding: CGFloat { Platform.isTV ? 80 : (Platform.isPhone ? 16 : s(38)) }
     /// Abstand zwischen Kopfbereich (Titel/Beschreibung) und den Regalen darunter.
     static var headerGap: CGFloat { s(22) }
     /// Innenhöhe der Pills oben rechts (Region, Profil), damit beide gleich hoch sind.

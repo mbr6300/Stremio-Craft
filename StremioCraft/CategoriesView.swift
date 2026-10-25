@@ -89,7 +89,7 @@ struct CategoriesView: View {
                 .pickerStyle(.segmented)
                 .frame(width: Theme.s(420))
                 .tvFocusSection()
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: Theme.s(380)), spacing: Theme.s(40))], spacing: Theme.s(40)) {
+                LazyVGrid(columns: columns, spacing: Theme.s(40)) {
                     ForEach(genres) { genre in
                         NavigationLink(value: AppRoute.discover(genre.query(type: type))) {
                             GenreTile(genre: genre)
@@ -104,6 +104,13 @@ struct CategoriesView: View {
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
+    }
+
+    /// iPhone: zwei Kacheln nebeneinander in voller Breite; sonst so viele, wie hineinpassen.
+    private var columns: [GridItem] {
+        Platform.isPhone
+            ? Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
+            : [GridItem(.adaptive(minimum: Theme.s(380)), spacing: Theme.s(40))]
     }
 }
 
@@ -131,7 +138,8 @@ private struct GenreTile: View {
                 .foregroundStyle(.white)
                 .padding(Theme.s(24))
         }
-        .frame(width: Theme.s(380), height: Theme.s(200))
+        .frame(width: Platform.isPhone ? nil : Theme.s(380), height: Theme.s(200))
+        .frame(maxWidth: Platform.isPhone ? .infinity : nil)
         .clipShape(RoundedRectangle(cornerRadius: Theme.s(18), style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.s(18), style: .continuous)

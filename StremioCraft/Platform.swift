@@ -14,6 +14,13 @@ enum Platform {
     static let isMac = false
     #endif
 
+    /// iPhone: schmaler Bildschirm, kleinerer Grundmassstab und knappere Ränder.
+    #if os(iOS) && !targetEnvironment(macCatalyst)
+    static let isPhone = UIDevice.current.userInterfaceIdiom == .phone
+    #else
+    static let isPhone = false
+    #endif
+
     #if targetEnvironment(macCatalyst)
     /// VLC für macOS kennt kein eigenes URL-Schema; die Stream-Adresse wird darum über
     /// `NSWorkspace` direkt an VLC übergeben. AppKit ist in Catalyst-Apps geladen,

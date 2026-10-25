@@ -64,9 +64,22 @@ struct DetailView: View {
                     .font(.system(size: Theme.s(20)))
                     .foregroundStyle(.yellow)
             }
-            actions
-                .padding(.top, Theme.s(6))
-                .tvFocusSection()
+            Group {
+                if Platform.isPhone {
+                    // iPhone: zu schmal für alle Knöpfe – seitlich wischbar statt zusammengequetscht.
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        actions
+                            .fixedSize()
+                            .padding(.horizontal, Theme.pagePadding)
+                    }
+                    .padding(.horizontal, -Theme.pagePadding)
+                    .scrollClipDisabled()
+                } else {
+                    actions
+                }
+            }
+            .padding(.top, Theme.s(6))
+            .tvFocusSection()
         }
     }
 
