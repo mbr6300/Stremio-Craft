@@ -6,6 +6,8 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+## 1.0.9 – 2026-10-27
+
 - YouTube: Oben stehen jetzt alle Abos als Leiste – „Alle Kanäle“ zeigt die neuen Videos aller Kanäle, ein einzelner Kanal nur dessen Videos (mit „Kanalseite öffnen“ und „Abo beenden“). Nach einer Suche führt „Zurück zu den Abos“ wieder zur Übersicht; abonnierte Kanäle sind in der Suche mit Häkchen markiert, und Videos lassen sich per langem Druck direkt abonnieren.
 - YouTube auf iPhone, iPad und Mac: Unter „Web“ holt der neue Knopf „Abos übernehmen“ alle Abos deines Google-Kontos in die App. Mit Geräte-Sync erscheinen sie so auch auf dem Apple TV.
 
