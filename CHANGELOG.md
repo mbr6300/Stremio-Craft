@@ -6,6 +6,8 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+## 1.0.10 – 2026-10-27
+
 - YouTube in HD: Videos laufen jetzt in 720p und 1080p statt nur 360p. Die Qualität passt sich der Verbindung an, der Originalton ist voreingestellt (andere Tonspuren im Player wählbar).
 
 ## 1.0.9 – 2026-10-27
