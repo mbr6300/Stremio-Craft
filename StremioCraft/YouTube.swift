@@ -116,7 +116,62 @@ enum YouTubeClient {
          "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip", "3")
     ]
 
+    /// Zugang der Apple-Vision-Pro-App: liefert mit einer Besucherkennung fertige HLS-Listen bis 1080p
+    /// (H.264 + AAC), ohne Prüf-Token und ohne JavaScript. Erster Versuch für jedes Video.
+    private static let visionAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
+    private static let visionClient: [String: Any] = [
+        "clientName": "VISIONOS", "clientVersion": "1.02", "deviceMake": "Apple", "deviceModel": "RealityDevice17,1",
+        "userAgent": visionAgent, "osName": "visionOS", "osVersion": "26.5.23O471"
+    ]
+
+    /// Besucherkennung („visitorData“) von der Startseite, ein paar Stunden wiederverwendet.
+    nonisolated(unsafe) private static var visitor: (value: String, fetched: Date)?
+
+    private static func visitorData() async -> String? {
+        if let visitor, Date().timeIntervalSince(visitor.fetched) < 6 * 3600 { return visitor.value }
+        guard let url = URL(string: "https://www.youtube.com/") else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue(visionAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("de,en", forHTTPHeaderField: "Accept-Language")
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let html = String(data: data, encoding: .utf8),
+              let range = html.range(of: #""VISITOR_DATA":"([^"]+)""#, options: .regularExpression) else { return nil }
+        let value = html[range].dropFirst(#""VISITOR_DATA":""#.count).dropLast()
+        visitor = (String(value), Date())
+        return String(value)
+    }
+
+    private static func visionStream(_ videoID: String) async -> YouTubeStream? {
+        guard let visitor = await visitorData() else { return nil }
+        var client = visionClient
+        client["hl"] = "de"
+        client["gl"] = region
+        client["visitorData"] = visitor
+        guard let json = try? await post(
+            "player",
+            body: ["context": ["client": client], "videoId": videoID, "contentCheckOk": true, "racyCheckOk": true],
+            agent: visionAgent,
+            headers: ["X-Youtube-Client-Name": "101", "X-Youtube-Client-Version": "1.02", "X-Goog-Visitor-Id": visitor]
+        ) else { return nil }
+        let status = json["playabilityStatus"] as? [String: Any]
+        guard status?["status"] as? String == "OK",
+              let hls = ((json["streamingData"] as? [String: Any])?["hlsManifestUrl"] as? String).flatMap(URL.init(string:)) else {
+            return nil
+        }
+        let title = (json["videoDetails"] as? [String: Any])?["title"] as? String ?? ""
+        // Liste aufräumen (siehe `HLSBuilder.cleanMaster`); klappt das nicht, die Liste unverändert nehmen.
+        var request = URLRequest(url: hls)
+        request.setValue(visionAgent, forHTTPHeaderField: "User-Agent")
+        if let (data, _) = try? await URLSession.shared.data(for: request),
+           let text = String(data: data, encoding: .utf8),
+           let master = HLSBuilder.cleanMaster(text) {
+            return YouTubeStream(title: title, source: .playlists(["master.m3u8": master]))
+        }
+        return YouTubeStream(title: title, source: .hls(hls))
+    }
+
     static func stream(_ videoID: String) async throws -> YouTubeStream {
+        if let stream = await visionStream(videoID) { return stream }
         var title = ""
         var fallback: URL?
         var lastError: Error = YouTubeError.noStreams
@@ -380,6 +435,54 @@ enum HLSBuilder {
         request.setValue("bytes=\(start)-\(start + 1023)", forHTTPHeaderField: "Range")
         let (_, response) = try await URLSession.shared.data(for: request)
         return (response as? HTTPURLResponse)?.statusCode == 206
+    }
+
+    /// Hauptliste von YouTube für AVPlayer vorbereiten: nur H.264 (läuft auf jedem Apple TV), nur die
+    /// bessere AAC-Tongruppe – sonst bleibt AVPlayer bei Videos mit mehreren Tonspuren in der schwachen
+    /// Gruppe bei 240p hängen –, Originalton als Standard und 720p als Startqualität.
+    static func cleanMaster(_ text: String) -> String? {
+        let lines = text.components(separatedBy: .newlines)
+        func attribute(_ name: String, in line: String) -> String? {
+            guard let range = line.range(of: "\(name)=") else { return nil }
+            let rest = line[range.upperBound...]
+            if rest.hasPrefix("\"") {
+                return rest.dropFirst().split(separator: "\"", maxSplits: 1).first.map(String.init)
+            }
+            return rest.split(separator: ",", maxSplits: 1).first.map(String.init)
+        }
+        // Varianten: Kopfzeile + Adresse in der nächsten Zeile.
+        var variants: [(info: String, uri: String, bandwidth: Int, height: Int)] = []
+        for (index, line) in lines.enumerated() where line.hasPrefix("#EXT-X-STREAM-INF") && index + 1 < lines.count {
+            guard attribute("CODECS", in: line)?.hasPrefix("avc1") == true else { continue }
+            let height = attribute("RESOLUTION", in: line)?.split(separator: "x").last.flatMap { Int($0) } ?? 0
+            variants.append((line, lines[index + 1], Int(attribute("BANDWIDTH", in: line) ?? "") ?? 0, height))
+        }
+        guard let best = variants.max(by: { $0.bandwidth < $1.bandwidth }) else { return nil }
+        let group = attribute("AUDIO", in: best.info)
+        variants = variants.filter { attribute("AUDIO", in: $0.info) == group }
+        // Start mit 720p (bzw. der nächstkleineren), danach absteigend.
+        let start = variants.filter { $0.height <= 720 }.max { $0.height < $1.height }
+        variants.sort { $0.bandwidth > $1.bandwidth }
+        if let start, let index = variants.firstIndex(where: { $0.uri == start.uri }) {
+            variants.insert(variants.remove(at: index), at: 0)
+        }
+
+        var output = ["#EXTM3U", "#EXT-X-INDEPENDENT-SEGMENTS"]
+        let audio = lines.filter { $0.hasPrefix("#EXT-X-MEDIA") && $0.contains("TYPE=AUDIO") && attribute("GROUP-ID", in: $0) == group }
+        let original = audio.firstIndex { $0.contains("original") } ?? 0
+        for (index, line) in audio.enumerated() {
+            output.append(line.replacingOccurrences(of: "DEFAULT=NO", with: index == original ? "DEFAULT=YES" : "DEFAULT=NO"))
+        }
+        // Untertitel nur auf Wunsch (sonst schaltet AVPlayer z. B. automatische Übersetzungen ein).
+        output += lines.filter { $0.hasPrefix("#EXT-X-MEDIA") && $0.contains("TYPE=SUBTITLES") }.map {
+            $0.replacingOccurrences(of: "AUTOSELECT=YES", with: "AUTOSELECT=NO")
+                .replacingOccurrences(of: "DEFAULT=YES", with: "DEFAULT=NO")
+        }
+        for variant in variants {
+            output.append(variant.info)
+            output.append(variant.uri)
+        }
+        return output.joined(separator: "\n") + "\n"
     }
 
     /// Liest den `sidx`-Index der Spur und macht daraus eine Liste mit einem Segment pro Eintrag.

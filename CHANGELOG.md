@@ -6,6 +6,8 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+- YouTube in HD: Videos laufen jetzt in 720p und 1080p statt nur 360p. Die Qualität passt sich der Verbindung an, der Originalton ist voreingestellt (andere Tonspuren im Player wählbar).
+
 ## 1.0.9 – 2026-10-27
 
 - YouTube: Oben stehen jetzt alle Abos als Leiste – „Alle Kanäle“ zeigt die neuen Videos aller Kanäle, ein einzelner Kanal nur dessen Videos (mit „Kanalseite öffnen“ und „Abo beenden“). Nach einer Suche führt „Zurück zu den Abos“ wieder zur Übersicht; abonnierte Kanäle sind in der Suche mit Häkchen markiert, und Videos lassen sich per langem Druck direkt abonnieren.
