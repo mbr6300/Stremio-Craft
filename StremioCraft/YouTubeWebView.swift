@@ -6,7 +6,10 @@ import WebKit
 /// „Unhook“-Regeln: keine Shorts, keine Startseiten-Vorschläge, keine Vorschläge neben/nach dem Video.
 /// Nur iPhone, iPad und Mac – Apple TV hat keine Web-Ansicht.
 struct YouTubeWebScreen: View {
+    @Environment(AppModel.self) private var model
     @State private var web = YouTubeWebModel()
+    @State private var importing = false
+    @State private var importResult: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,6 +20,14 @@ struct YouTubeWebScreen: View {
                     .disabled(!web.canGoForward)
                 Button { web.view.reload() } label: { Image(systemName: "arrow.clockwise") }
                 Spacer()
+                Button { Task { await importSubscriptions() } } label: {
+                    if importing {
+                        ProgressView()
+                    } else {
+                        Label("Abos übernehmen", systemImage: "square.and.arrow.down")
+                    }
+                }
+                .disabled(importing)
                 Button { web.open("https://www.youtube.com/feed/subscriptions") } label: {
                     Label("Abos", systemImage: "person.crop.rectangle.stack")
                 }
@@ -29,6 +40,24 @@ struct YouTubeWebScreen: View {
             .padding(.bottom, 8)
             YouTubeWebContainer(web: web)
                 .ignoresSafeArea(edges: .bottom)
+        }
+        .alert("Abos übernehmen", isPresented: Binding(get: { importResult != nil }, set: { if !$0 { importResult = nil } })) {
+            Button("OK") { importResult = nil }
+        } message: {
+            Text(importResult ?? "")
+        }
+    }
+
+    /// Abos des angemeldeten Google-Kontos in die App-Ansicht holen (und damit per Sync auf Apple TV).
+    private func importSubscriptions() async {
+        importing = true
+        defer { importing = false }
+        do {
+            let channels = try await web.accountSubscriptions()
+            let added = model.addSubscriptions(channels)
+            importResult = "\(channels.count) Abos gefunden, \(added) neu übernommen. Sie erscheinen unter „App“ und – mit Geräte-Sync – auch auf dem Apple TV."
+        } catch {
+            importResult = error.localizedDescription
         }
     }
 }
@@ -78,6 +107,27 @@ final class YouTubeWebModel {
         guard let url = URL(string: address) else { return }
         view.load(URLRequest(url: url))
     }
+
+    /// Liest die Abos des angemeldeten Kontos über die Sitzung der Seite (wie YouTube selbst).
+    func accountSubscriptions() async throws -> [YouTubeChannel] {
+        guard view.url?.host?.hasSuffix("youtube.com") == true else {
+            throw AppFailure.message("Öffne zuerst YouTube (Knopf „Start“) und melde dich an.")
+        }
+        let result = try await view.callAsyncJavaScript(YouTubeWebRules.subscriptionsScript, contentWorld: .page)
+        guard let object = result as? [String: Any] else { throw AppFailure.message("YouTube hat keine Abos geliefert.") }
+        if let error = object["error"] as? String {
+            throw AppFailure.message(error == "login"
+                ? "Du bist nicht angemeldet. Tippe oben rechts auf „Anmelden“ und versuche es danach nochmals."
+                : "YouTube hat die Abos nicht herausgegeben (\(error)).")
+        }
+        let list = object["channels"] as? [[String: Any]] ?? []
+        let channels = list.compactMap { entry -> YouTubeChannel? in
+            guard let id = entry["id"] as? String, let title = entry["title"] as? String else { return nil }
+            return YouTubeChannel(id: id, title: title, thumbnail: (entry["thumb"] as? String).flatMap(URL.init(string:)))
+        }
+        guard !channels.isEmpty else { throw AppFailure.message("In diesem Konto wurden keine Abos gefunden.") }
+        return channels
+    }
 }
 
 private struct YouTubeWebContainer: UIViewRepresentable {
@@ -100,6 +150,54 @@ enum YouTubeWebRules {
       {"trigger": {"url-filter": "youtube\\\\.com/ptracking"}, "action": {"type": "block"}},
       {"trigger": {"url-filter": "youtube\\\\.com/get_midroll_"}, "action": {"type": "block"}}
     ]
+    """
+
+    /// Abo-Liste („FEchannels“) mit der Anmeldung der Seite abrufen, alle Seiten nacheinander.
+    /// Läuft als Funktionskörper (`callAsyncJavaScript`), darum `return` und `await` erlaubt.
+    static let subscriptionsScript = """
+    const pick = (name) => (document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)')) || [])[1];
+    const sapisid = pick('SAPISID') || pick('__Secure-3PAPISID');
+    if (!sapisid) return { error: 'login' };
+    const origin = location.origin;
+    const ts = Math.floor(Date.now() / 1000);
+    const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(ts + ' ' + sapisid + ' ' + origin));
+    const hex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const context = (window.ytcfg && ytcfg.get('INNERTUBE_CONTEXT'))
+      || { client: { clientName: 'WEB', clientVersion: '2.20250101.00.00', hl: 'de' } };
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'SAPISIDHASH ' + ts + '_' + hex,
+      'X-Origin': origin,
+      'X-Goog-AuthUser': '0'
+    };
+    const channels = {};
+    let body = { context: context, browseId: 'FEchannels' };
+    for (let page = 0; page < 40; page++) {
+      const response = await fetch('/youtubei/v1/browse?prettyPrint=false', {
+        method: 'POST', credentials: 'include', headers: headers, body: JSON.stringify(body)
+      });
+      if (!response.ok) return { error: 'HTTP ' + response.status };
+      const data = await response.json();
+      let next = null;
+      const walk = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { node.forEach(walk); return; }
+        const c = node.channelRenderer;
+        if (c && c.channelId) {
+          const thumbs = (c.thumbnail && c.thumbnail.thumbnails) || [];
+          let thumb = thumbs.length ? thumbs[thumbs.length - 1].url : null;
+          if (thumb && thumb.startsWith('//')) thumb = 'https:' + thumb;
+          const title = c.title ? (c.title.simpleText || (c.title.runs || []).map(r => r.text).join('')) : '';
+          channels[c.channelId] = { id: c.channelId, title: title, thumb: thumb };
+        }
+        if (node.continuationCommand && node.continuationCommand.token) next = node.continuationCommand.token;
+        for (const key in node) walk(node[key]);
+      };
+      walk(data);
+      if (!next) break;
+      body = { context: context, continuation: next };
+    }
+    return { channels: Object.values(channels) };
     """
 
     /// Ausblenden per CSS (Desktop- und Mobilseite) und Werbung im Player überspringen.

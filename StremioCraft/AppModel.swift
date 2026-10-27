@@ -1030,6 +1030,17 @@ final class AppModel {
         save(youtubeChannels, key: youtubeChannelsKey)
     }
 
+    /// Übernimmt Kanäle (z. B. die Abos des Google-Kontos); gibt zurück, wie viele neu dazukamen.
+    @discardableResult
+    func addSubscriptions(_ channels: [YouTubeChannel]) -> Int {
+        let known = Set(youtubeChannels.map(\.id))
+        let added = channels.filter { !known.contains($0.id) }
+        guard !added.isEmpty else { return 0 }
+        youtubeChannels += added
+        save(youtubeChannels, key: youtubeChannelsKey)
+        return added.count
+    }
+
     /// Wiedergabeposition eines YouTube-Videos, nur auf diesem Gerät (wie bei der Mediathek).
     func youtubePosition(_ videoID: String) -> Double? {
         libraryProgress["yt|\(videoID)"]

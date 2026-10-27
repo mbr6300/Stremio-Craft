@@ -38,6 +38,9 @@ private struct YouTubeHome: View {
     @State private var isLoading = false
     @State private var message: String?
     @State private var playing: YouTubeVideo?
+    /// Kanal-ID für „nur dieser Kanal“; `nil` = alle Abos.
+    @State private var filter: String?
+    @Environment(\.openRoute) private var openRoute
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -81,6 +84,21 @@ private struct YouTubeHome: View {
 
     @ViewBuilder
     private func searchResults(_ results: (channels: [YouTubeChannel], videos: [YouTubeVideo])) -> some View {
+        HStack(spacing: Theme.s(24)) {
+            Text("Suche „\(trimmed)“")
+                .font(.system(size: Theme.s(26), weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Button {
+                query = ""
+                self.results = nil
+            } label: {
+                Label("Zurück zu den Abos", systemImage: "xmark")
+            }
+            .buttonStyle(PillButtonStyle())
+        }
+        .tvFocusSection()
         if !results.channels.isEmpty {
             section("Kanäle") {
                 ChannelRow(channels: results.channels)
@@ -103,17 +121,68 @@ private struct YouTubeHome: View {
                 symbol: "person.crop.rectangle.stack"
             )
         } else {
-            section("Abos") {
-                ChannelRow(channels: model.youtubeChannels)
+            section("Abos (\(model.youtubeChannels.count))") {
+                channelFilter
             }
-            section("Neu von deinen Abos") {
-                if feed.isEmpty, !isLoading {
+            if let channel = selectedChannel {
+                HStack(spacing: Theme.s(24)) {
+                    NavigationLink(value: AppRoute.youtubeChannel(channel)) {
+                        Label("Kanalseite öffnen", systemImage: "person.crop.rectangle")
+                    }
+                    Button {
+                        filter = nil
+                        model.toggleSubscription(channel)
+                    } label: {
+                        Label("Abo beenden", systemImage: "minus.circle")
+                    }
+                }
+                .buttonStyle(PillButtonStyle())
+                .tvFocusSection()
+            }
+            section(selectedChannel.map { "Neueste Videos von \($0.title)" } ?? "Neu von deinen Abos") {
+                let videos = selectedChannel.map { channel in feed.filter { $0.channelID == channel.id } } ?? Array(feed.prefix(120))
+                if videos.isEmpty, !isLoading {
                     EmptyHint(text: "Noch keine Videos geladen.", symbol: "play.rectangle")
                 } else {
-                    VideoGrid(videos: Array(feed.prefix(60)), playing: $playing)
+                    VideoGrid(videos: videos, playing: $playing)
                 }
             }
         }
+    }
+
+    private var selectedChannel: YouTubeChannel? {
+        filter.flatMap { id in model.youtubeChannels.first { $0.id == id } }
+    }
+
+    /// „Alle Kanäle“ oder ein einzelner Kanal – filtert die Videos darunter.
+    private var channelFilter: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: Theme.s(20)) {
+                Button { filter = nil } label: {
+                    ChannelChip(title: "Alle Kanäle", channel: nil, selected: selectedChannel == nil)
+                }
+                .buttonStyle(PosterButtonStyle())
+                ForEach(model.youtubeChannels) { channel in
+                    Button { filter = channel.id } label: {
+                        ChannelChip(title: channel.title, channel: channel, selected: filter == channel.id)
+                    }
+                    .buttonStyle(PosterButtonStyle())
+                    .contextMenu {
+                        Button { openRoute(.youtubeChannel(channel)) } label: {
+                            Label("Kanalseite öffnen", systemImage: "person.crop.rectangle")
+                        }
+                        Button(role: .destructive) {
+                            if filter == channel.id { filter = nil }
+                            model.toggleSubscription(channel)
+                        } label: {
+                            Label("Abo beenden", systemImage: "minus.circle")
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, Theme.s(12))
+        }
+        .scrollClipDisabled()
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -202,15 +271,17 @@ struct YouTubeChannelView: View {
 
 // MARK: - Bausteine
 
+/// Kanäle aus der Suche: öffnen die Kanalseite (dort „Abonnieren“); abonnierte mit Häkchen.
 private struct ChannelRow: View {
     var channels: [YouTubeChannel]
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: Theme.s(24)) {
                 ForEach(channels) { channel in
                     NavigationLink(value: AppRoute.youtubeChannel(channel)) {
-                        ChannelChip(channel: channel)
+                        ChannelChip(title: channel.title, channel: channel, subscribed: model.isSubscribed(channel.id))
                     }
                     .buttonStyle(PosterButtonStyle())
                 }
@@ -222,21 +293,36 @@ private struct ChannelRow: View {
 }
 
 private struct ChannelChip: View {
-    var channel: YouTubeChannel
+    var title: String
+    /// `nil` = Eintrag „Alle Kanäle“.
+    var channel: YouTubeChannel?
+    var selected = false
+    var subscribed = false
     @Environment(\.isFocused) private var isFocused
 
     var body: some View {
         HStack(spacing: Theme.s(14)) {
-            ChannelAvatar(channel: channel, size: Theme.s(52))
-            Text(channel.title)
+            if let channel {
+                ChannelAvatar(channel: channel, size: Theme.s(52))
+            } else {
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.system(size: Theme.s(26)))
+                    .frame(width: Theme.s(52), height: Theme.s(52))
+            }
+            Text(title)
                 .font(.system(size: Theme.s(22), weight: .semibold))
                 .lineLimit(1)
+            if subscribed {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: Theme.s(22)))
+                    .foregroundStyle(isFocused ? Theme.accentDeep : Theme.accent)
+            }
         }
         .padding(.leading, Theme.s(10))
         .padding(.trailing, Theme.s(22))
         .padding(.vertical, Theme.s(10))
         .foregroundStyle(isFocused ? Color.black : .white)
-        .background(isFocused ? Color.white : Theme.surface, in: Capsule())
+        .background(isFocused ? Color.white : (selected ? Theme.accent : Theme.surface), in: Capsule())
         .scaleEffect(isFocused ? 1.06 : 1)
         .animation(.easeOut(duration: 0.15), value: isFocused)
     }
@@ -287,6 +373,12 @@ private struct VideoGrid: View {
                             openRoute(.youtubeChannel(YouTubeChannel(id: video.channelID, title: video.channelTitle)))
                         } label: {
                             Label("Kanal öffnen", systemImage: "person.crop.rectangle")
+                        }
+                        let channel = YouTubeChannel(id: video.channelID, title: video.channelTitle)
+                        Button { model.toggleSubscription(channel) } label: {
+                            model.isSubscribed(channel.id)
+                                ? Label("Abo beenden", systemImage: "minus.circle")
+                                : Label("Kanal abonnieren", systemImage: "plus.circle")
                         }
                     }
                     if (model.youtubePosition(video.id) ?? 0) >= 15 {

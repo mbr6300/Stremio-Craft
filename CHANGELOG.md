@@ -6,6 +6,9 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+- YouTube: Oben stehen jetzt alle Abos als Leiste – „Alle Kanäle“ zeigt die neuen Videos aller Kanäle, ein einzelner Kanal nur dessen Videos (mit „Kanalseite öffnen“ und „Abo beenden“). Nach einer Suche führt „Zurück zu den Abos“ wieder zur Übersicht; abonnierte Kanäle sind in der Suche mit Häkchen markiert, und Videos lassen sich per langem Druck direkt abonnieren.
+- YouTube auf iPhone, iPad und Mac: Unter „Web“ holt der neue Knopf „Abos übernehmen“ alle Abos deines Google-Kontos in die App. Mit Geräte-Sync erscheinen sie so auch auf dem Apple TV.
+
 ## 1.0.8 – 2026-10-27
 
 - Neu im Menü: YouTube ohne Werbung und ohne Ablenkung. Kanäle suchen und abonnieren, ihre neuesten Videos erscheinen unter „Neu von deinen Abos“ – ohne Shorts und ohne Vorschläge. Die Abos gelten auf allen Geräten, und die App merkt sich, wo du aufgehört hast. Gibt YouTube ein Video gerade nur eingeschränkt frei, läuft es in 360p.
