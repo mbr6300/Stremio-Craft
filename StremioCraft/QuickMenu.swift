@@ -55,6 +55,7 @@ struct QuickMenu: View {
         (.search, "Suche", "magnifyingglass"),
         (.library, "Bibliothek", "rectangle.stack"),
         (.mediaLibrary, "Meine Mediathek", "externaldrive.connected.to.line.below"),
+        (.youtube, "YouTube", "play.rectangle"),
         (.settings, "Einstellungen", "gearshape")
     ]
 

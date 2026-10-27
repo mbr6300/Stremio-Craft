@@ -62,6 +62,14 @@ weiterreichen (Vor-/Zurückspulen grosser Dateien sorgfältig testen). Aufwand e
 
 ## Erledigt
 
+- Unveröffentlicht: YouTube ohne Werbung und Ablenkung – eigene Ansicht auf allen Geräten (Suche, Abos per
+  RSS, Wiedergabe über HLS im Systemplayer, notfalls 360p) und auf iPhone/iPad/Mac die Webseite mit
+  Werbeblocker und Google-Anmeldung. Abweichung vom Wunsch: kein Firefox mit Erweiterungen – Apple TV hat
+  keinen Browser, und auf Apple-Geräten laufen Firefox-Erweiterungen nicht; die Regeln sind nachgebaut.
+  Integrierter Player als Standard für alle Geräte.
+- Unveröffentlicht: Schauspieler und Regie im Detail antippbar (Reihe „Regie & Besetzung“ aus TMDB),
+  Personenseite mit Filmen und Serien; Talkshows und Auftritte „als sich selbst“ ausgeblendet.
+
 - Unveröffentlicht: eigene Titeldatenbank auf Cloudflare (rund 30'000 Filme und Serien, IMDb ab 6.0,
   alle 3 Monate neu) als Grundlage für „Empfohlen für dich“, Vorlieben im Profil, „Kein Interesse“.
   Abweichung vom Plan: Stichworte und Besetzung kommen von TMDB, weil IMDb Anfragen aus dem

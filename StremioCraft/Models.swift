@@ -195,8 +195,8 @@ enum PlayerChoice: String, Codable, CaseIterable, Identifiable {
     case builtIn
     var id: String { rawValue }
 
-    /// Auf dem Mac ist Infuse kaum verbreitet; der integrierte Player (KSPlayer) spielt dort alles.
-    static var platformDefault: PlayerChoice { Platform.isMac ? .builtIn : .infuse }
+    /// Überall der integrierte Player (KSPlayer): spielt fast alles und braucht keine Zusatz-App.
+    static var platformDefault: PlayerChoice { .builtIn }
 
     var label: String {
         switch self {
@@ -326,6 +326,10 @@ enum AppRoute: Hashable {
     case row(String)
     /// Ordner der Mediathek: Quelle (ID), WebDAV-`href` (`nil` = Startordner), Anzeigename.
     case mediaFolder(String, String?, String)
+    /// Neueste Videos eines YouTube-Kanals.
+    case youtubeChannel(YouTubeChannel)
+    /// Filme und Serien einer Person (Schauspiel, Regie).
+    case person(PersonRef)
 }
 
 extension AppRoute {

@@ -105,6 +105,8 @@ struct SyncSnapshot: Codable, Equatable {
     var mediaLibrary: MediaLibraryConfig?
     /// Quellen der Mediathek (Adresse, Benutzer, Passwort) – der ganze Stand ist Ende-zu-Ende verschlüsselt.
     var mediaLibraries: [MediaLibraryConfig]?
+    /// Abonnierte YouTube-Kanäle (fehlt in Ständen vor 1.0.8).
+    var youtubeChannels: [YouTubeChannel]?
 
     /// Nur die geteilten Inhalte – ohne Geräteliste, die das AppModel nicht betrifft.
     var sharedData: SyncSnapshot {
@@ -172,6 +174,7 @@ enum SyncMerge {
             snapshot.mediaLibraries ?? snapshot.mediaLibrary.map { [$0] } ?? []
         }
         result.mediaLibraries = keyed(sources(base), sources(local), sources(remote), id: \.id) { mine, _ in mine }
+        result.youtubeChannels = keyed(base.youtubeChannels ?? [], local.youtubeChannels ?? [], remote.youtubeChannels ?? [], id: \.id) { mine, _ in mine }
         result.realDebridToken = value(base.realDebridToken, local.realDebridToken, remote.realDebridToken, preferRemote: joining && remote.realDebridToken != nil)
         result.devices = keyed(base.devices ?? [], local.devices ?? [], remote.devices ?? [], id: \.id) { mine, theirs in
             mine.lastSeen >= theirs.lastSeen ? mine : theirs

@@ -14,6 +14,7 @@ struct DetailView: View {
     @State private var appendingSeason = false
     @State private var imdb: IMDbInfo?
     @State private var trailers: [Trailer] = []
+    @State private var people: [PersonRef] = []
 
     private var shown: MediaItem { detail?.media ?? item }
     private var saved: WatchProgress? { model.progress(for: shown) }
@@ -32,6 +33,16 @@ struct DetailView: View {
                     if isSeries {
                         seasonBar
                         episodeShelf
+                    }
+                    if !people.isEmpty {
+                        Shelf(title: isSeries ? "Idee & Besetzung" : "Regie & Besetzung") {
+                            ForEach(people) { person in
+                                NavigationLink(value: AppRoute.person(person)) {
+                                    PersonCard(person: person)
+                                }
+                                .buttonStyle(PosterButtonStyle())
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,7 +103,8 @@ struct DetailView: View {
 
     @ViewBuilder
     private var credits: some View {
-        if let imdb, !(imdb.directors.isEmpty && imdb.cast.isEmpty) {
+        // Mit TMDB-Besetzung stehen die Namen antippbar weiter unten; sonst die IMDb-Namen als Text.
+        if people.isEmpty, let imdb, !(imdb.directors.isEmpty && imdb.cast.isEmpty) {
             VStack(alignment: .leading, spacing: Theme.s(6)) {
                 if !imdb.directors.isEmpty {
                     creditLine(isSeries ? "Idee" : "Regie", imdb.directors.prefix(2).joined(separator: ", "))
@@ -421,6 +433,9 @@ struct DetailView: View {
             let key = model.tmdbAPIKey
             Task {
                 trailers = (try? await TMDBClient.fetchTrailers(apiKey: key, tmdbId: item.tmdbId, mediaType: item.normalizedType)) ?? []
+            }
+            Task {
+                people = (try? await TMDBClient.fetchPeople(apiKey: key, item: loaded.media)) ?? []
             }
             if loaded.media.normalizedType == "tv" {
                 // Ohne laufenden Fortschritt bei der ersten Staffel einsteigen, die noch nicht ganz gesehen ist.

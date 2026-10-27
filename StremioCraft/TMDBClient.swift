@@ -536,3 +536,105 @@ private struct SeasonEpisode: Decodable {
         case stillPath = "still_path"
     }
 }
+
+// MARK: - Personen
+
+/// Eine Person aus Besetzung oder Regie; führt auf ihre Personenseite.
+struct PersonRef: Identifiable, Hashable {
+    enum Role: String, Hashable { case director, creator, cast }
+
+    var id: Int
+    var name: String
+    var photoURL: URL?
+    var role: Role
+    /// Rolle im Titel, z. B. „Tony Stark“ (nur bei Besetzung).
+    var character: String?
+
+    var roleLabel: String {
+        switch role {
+        case .director: return "Regie"
+        case .creator: return "Idee"
+        case .cast: return character ?? ""
+        }
+    }
+}
+
+/// Filme und Serien einer Person, getrennt nach Regie/Idee und Schauspiel.
+struct Filmography {
+    var directed: [MediaItem]
+    var acted: [MediaItem]
+}
+
+extension TMDBClient {
+    /// Regie bzw. Idee und die wichtigsten Rollen eines Titels.
+    static func fetchPeople(apiKey: String, item: MediaItem) async throws -> [PersonRef] {
+        let isTV = item.normalizedType == "tv"
+        let url = try makeURL("/\(isTV ? "tv" : "movie")/\(item.tmdbId)", [
+            "api_key": apiKey,
+            "language": "de-DE",
+            "append_to_response": isTV ? "aggregate_credits" : "credits"
+        ])
+        let object = try JSONSerialization.jsonObject(with: try await data(from: url)) as? [String: Any] ?? [:]
+        let credits = object[isTV ? "aggregate_credits" : "credits"] as? [String: Any] ?? [:]
+        func person(_ entry: [String: Any], role: PersonRef.Role, character: String? = nil) -> PersonRef? {
+            guard let id = entry["id"] as? Int, let name = entry["name"] as? String else { return nil }
+            return PersonRef(id: id, name: name, photoURL: image(entry["profile_path"] as? String, size: "w185"), role: role, character: character)
+        }
+        var people: [PersonRef] = []
+        if isTV {
+            people += (object["created_by"] as? [[String: Any]] ?? []).prefix(2).compactMap { person($0, role: .creator) }
+        } else {
+            let crew = credits["crew"] as? [[String: Any]] ?? []
+            people += crew.filter { $0["job"] as? String == "Director" }.prefix(2).compactMap { person($0, role: .director) }
+        }
+        let cast = (credits["cast"] as? [[String: Any]] ?? []).prefix(15)
+        people += cast.compactMap { entry in
+            let character = (entry["character"] as? String)
+                ?? ((entry["roles"] as? [[String: Any]])?.first?["character"] as? String)
+            return person(entry, role: .cast, character: character.flatMap { $0.isEmpty ? nil : $0 })
+        }
+        // Wer Regie führt und mitspielt, nur einmal zeigen.
+        var seen = Set<Int>()
+        return people.filter { seen.insert($0.id).inserted }
+    }
+
+    /// Alle Filme und Serien einer Person, beliebteste zuerst. Talkshows, Nachrichten und Auftritte
+    /// „als sich selbst“ fallen weg.
+    static func fetchFilmography(apiKey: String, personId: Int) async throws -> Filmography {
+        let url = try makeURL("/person/\(personId)/combined_credits", ["api_key": apiKey, "language": "de-DE"])
+        let object = try JSONSerialization.jsonObject(with: try await data(from: url)) as? [String: Any] ?? [:]
+        let skippedGenres: Set<Int> = [10767, 10763, 10764] // Talk, News, Reality
+        func items(_ entries: [[String: Any]], keep: ([String: Any]) -> Bool) -> [MediaItem] {
+            var seen = Set<String>()
+            return entries
+                .filter { entry in
+                    let genres = Set(entry["genre_ids"] as? [Int] ?? [])
+                    return keep(entry) && genres.isDisjoint(with: skippedGenres) && entry["poster_path"] is String
+                }
+                .sorted { ($0["popularity"] as? Double ?? 0) > ($1["popularity"] as? Double ?? 0) }
+                .compactMap { entry -> MediaItem? in
+                    guard let id = entry["id"] as? Int, let type = entry["media_type"] as? String,
+                          type == "movie" || type == "tv", seen.insert("\(type)-\(id)").inserted,
+                          let title = (entry["title"] as? String) ?? (entry["name"] as? String) else { return nil }
+                    return MediaItem(
+                        tmdbId: id,
+                        mediaType: type,
+                        title: title,
+                        overview: entry["overview"] as? String ?? "",
+                        posterURL: image(entry["poster_path"] as? String, size: "w500"),
+                        backdropURL: image(entry["backdrop_path"] as? String, size: "w1280"),
+                        year: year(from: (entry["release_date"] as? String) ?? (entry["first_air_date"] as? String)),
+                        rating: entry["vote_average"] as? Double
+                    )
+                }
+        }
+        let cast = object["cast"] as? [[String: Any]] ?? []
+        let crew = object["crew"] as? [[String: Any]] ?? []
+        let acted = items(cast) { entry in
+            let character = (entry["character"] as? String ?? "").lowercased()
+            return !["self", "himself", "herself", "themselves", "narrator"].contains { character.hasPrefix($0) }
+        }
+        let directed = items(crew) { ["Director", "Creator"].contains($0["job"] as? String ?? "") }
+        return Filmography(directed: directed, acted: acted)
+    }
+}

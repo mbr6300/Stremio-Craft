@@ -24,6 +24,7 @@ final class AppModel {
     private let mediaLibraryKey = "mediaLibrary"
     private let mediaLibrariesKey = "mediaLibraries"
     private let libraryProgressKey = "libraryProgress"
+    private let youtubeChannelsKey = "youtubeChannels"
     private let profilesKey = "profiles"
     private let activeProfileKey = "activeProfile"
     private let zoomKey = "uiZoom"
@@ -46,6 +47,8 @@ final class AppModel {
     /// Zuletzt gewählter Stream je Serie ("tv-<id>"), nur auf diesem Gerät.
     @ObservationIgnored private var streamMemory: [String: StreamMemory] = [:]
     private var libraryProgress: [String: Double] = [:]
+    /// Abonnierte YouTube-Kanäle, neueste zuerst.
+    private(set) var youtubeChannels: [YouTubeChannel] = []
     var continueWatching: [WatchProgress] = []
     var favorites: [FavoriteItem] = []
     var rows: [CatalogRow] = []
@@ -125,6 +128,11 @@ final class AppModel {
             }
         }
         defaults.set(CatalogEntry.defaultsVersion, forKey: catalogsVersionKey)
+        // Ab 1.0.8 einmalig auf den integrierten Player umstellen; danach gilt die eigene Wahl wieder.
+        if !defaults.bool(forKey: "playerBuiltInMigrated") {
+            defaults.removeObject(forKey: playerKey)
+            defaults.set(true, forKey: "playerBuiltInMigrated")
+        }
         player = defaults.string(forKey: playerKey).flatMap(PlayerChoice.init(rawValue:)) ?? .platformDefault
         autoPlayBest = defaults.object(forKey: autoPlayKey) as? Bool ?? true
         if let data = defaults.data(forKey: streamPreferencesKey),
@@ -132,6 +140,7 @@ final class AppModel {
             streamPreferences = stored
         }
         libraryProgress = defaults.dictionary(forKey: libraryProgressKey) as? [String: Double] ?? [:]
+        youtubeChannels = decodeList(YouTubeChannel.self, key: youtubeChannelsKey)
         if let data = defaults.data(forKey: streamMemoryKey),
            let stored = try? JSONDecoder().decode([String: StreamMemory].self, from: data) {
             streamMemory = stored
@@ -1005,6 +1014,31 @@ final class AppModel {
         defaults.set(libraryProgress, forKey: libraryProgressKey)
     }
 
+    // MARK: YouTube
+
+    func isSubscribed(_ channelID: String) -> Bool {
+        youtubeChannels.contains { $0.id == channelID }
+    }
+
+    /// Kanal abonnieren bzw. abbestellen (für alle Profile, wird synchronisiert).
+    func toggleSubscription(_ channel: YouTubeChannel) {
+        if isSubscribed(channel.id) {
+            youtubeChannels.removeAll { $0.id == channel.id }
+        } else {
+            youtubeChannels.insert(channel, at: 0)
+        }
+        save(youtubeChannels, key: youtubeChannelsKey)
+    }
+
+    /// Wiedergabeposition eines YouTube-Videos, nur auf diesem Gerät (wie bei der Mediathek).
+    func youtubePosition(_ videoID: String) -> Double? {
+        libraryProgress["yt|\(videoID)"]
+    }
+
+    func saveYouTubePosition(_ videoID: String, position: Double, duration: Double) {
+        saveLibraryPosition("yt|\(videoID)", position: position, duration: duration)
+    }
+
     func saveStreamPreferences(_ preferences: StreamPreferences) {
         guard preferences != streamPreferences else { return }
         streamPreferences = preferences
@@ -1082,7 +1116,8 @@ extension AppModel {
             torrentio: torrentio,
             realDebridToken: KeychainStore.loadToken(),
             streamPreferences: streamPreferences,
-            mediaLibraries: mediaLibraries
+            mediaLibraries: mediaLibraries,
+            youtubeChannels: youtubeChannels
         )
     }
 
@@ -1133,6 +1168,10 @@ extension AppModel {
         if let preferences = snapshot.streamPreferences { saveStreamPreferences(preferences) }
         if let libraries = snapshot.mediaLibraries ?? snapshot.mediaLibrary.map({ [$0] }), libraries != mediaLibraries {
             mediaLibraries = libraries
+        }
+        if let channels = snapshot.youtubeChannels, channels != youtubeChannels {
+            youtubeChannels = channels
+            save(channels, key: youtubeChannelsKey)
         }
         if let torrentio = snapshot.torrentio, torrentio != self.torrentio {
             self.torrentio = torrentio

@@ -554,7 +554,10 @@ final class PlayerController: ObservableObject {
     private var didSeek = false
 
     func load(url: URL, resume: Double) {
-        let item = AVPlayerItem(url: url)
+        load(item: AVPlayerItem(url: url), resume: resume)
+    }
+
+    func load(item: AVPlayerItem, resume: Double) {
         statusCancellable = item.publisher(for: \.status)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in

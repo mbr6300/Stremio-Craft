@@ -84,7 +84,7 @@ struct StremioCraftApp: App {
 }
 
 enum AppTab: String, Hashable {
-    case profiles, home, categories, search, library, mediaLibrary, settings
+    case profiles, home, categories, search, library, mediaLibrary, youtube, settings
 }
 
 /// Seitenleiste wie in der Apple-TV-App (tvOS 18): am linken Rand nach links öffnet das Menü.
@@ -148,6 +148,9 @@ struct RootView: View {
             Tab("Meine Mediathek", systemImage: "externaldrive.connected.to.line.below", value: AppTab.mediaLibrary) {
                 NavigationTab { MediaLibraryView() }
             }
+            Tab("YouTube", systemImage: "play.rectangle", value: AppTab.youtube) {
+                NavigationTab { YouTubeView() }
+            }
             Tab("Einstellungen", systemImage: "gearshape", value: AppTab.settings) {
                 NavigationTab { SettingsView() }
             }
@@ -199,6 +202,10 @@ private struct NavigationTab<Root: View>: View {
                         RowGridView(rowId: id)
                     case .mediaFolder(let sourceID, let href, let title):
                         MediaLibraryView(sourceID: sourceID, href: href, title: title)
+                    case .youtubeChannel(let channel):
+                        YouTubeChannelView(channel: channel)
+                    case .person(let person):
+                        PersonView(person: person)
                     }
                 }
         }
