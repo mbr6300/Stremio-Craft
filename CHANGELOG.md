@@ -6,6 +6,8 @@ ihn den Testern in TestFlight unter „Was ist zu testen?“. Ohne Eintrag lädt
 
 ## Unveröffentlicht
 
+## 1.0.8 – 2026-10-27
+
 - Neu im Menü: YouTube ohne Werbung und ohne Ablenkung. Kanäle suchen und abonnieren, ihre neuesten Videos erscheinen unter „Neu von deinen Abos“ – ohne Shorts und ohne Vorschläge. Die Abos gelten auf allen Geräten, und die App merkt sich, wo du aufgehört hast. Gibt YouTube ein Video gerade nur eingeschränkt frei, läuft es in 360p.
 - iPhone, iPad und Mac: Unter YouTube → „Web“ gibt es zusätzlich die echte YouTube-Seite mit Werbeblocker. Dort kannst du dich mit deinem Google-Konto anmelden und deine eigenen Abos, Playlists und Kommentare nutzen; Shorts und Vorschläge bleiben ausgeblendet.
 - Schauspieler und Regie: Auf der Detailseite steht neu die Reihe „Regie & Besetzung“ mit Fotos. Ein Klick auf eine Person zeigt ihre Filme und Serien – bei der Regie ihre anderen Filme, bei Schauspielern alles, worin sie mitspielen.
